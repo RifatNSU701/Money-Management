@@ -12,7 +12,7 @@ import 'package:money_management/main.dart';
 void main() {
   testWidgets('App loads dashboard smoke test', (WidgetTester tester) async {
     // Build our app and trigger a frame.
-    await tester.pumpWidget(const FinanceApp());
+    await tester.pumpWidget(const FinanceApp(startLoggedIn: true));
 
     // Verify that the dashboard screen is displayed by finding text from the first tab.
     expect(find.text('Total Balance'), findsOneWidget);

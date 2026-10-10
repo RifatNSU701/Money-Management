@@ -1,16 +1,95 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'providers/transaction_provider.dart';
 
-void main() {
-  runApp(const FinanceApp());
+// =============================================================================
+// STRICT AUTHENTICATION & SESSION SERVICE
+// =============================================================================
+class AuthService {
+  static const String _keyIsLoggedIn = 'is_logged_in';
+  static const String _keyUserName = 'user_name';
+  static const String _keyUserEmail = 'user_email';
+  static const String _keyUserPassword = 'user_password';
+
+  static Future<bool> isLoggedIn() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyIsLoggedIn) ?? false;
+  }
+
+  static Future<Map<String, String>> getCurrentUser() async {
+    final prefs = await SharedPreferences.getInstance();
+    return {
+      'name': prefs.getString(_keyUserName) ?? 'Guest User',
+      'email': prefs.getString(_keyUserEmail) ?? 'Not logged in',
+    };
+  }
+
+  static Future<String?> register({
+    required String name,
+    required String email,
+    required String password,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 800));
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyUserName, name);
+    await prefs.setString(_keyUserEmail, email);
+    await prefs.setString(_keyUserPassword, password);
+    await prefs.setBool(_keyIsLoggedIn, true);
+    return null;
+  }
+
+  static Future<String?> login({
+    required String email,
+    required String password,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 800));
+    final prefs = await SharedPreferences.getInstance();
+    final storedEmail = prefs.getString(_keyUserEmail);
+    final storedPassword = prefs.getString(_keyUserPassword);
+
+    if (storedEmail == null || storedEmail.isEmpty) {
+      return 'No account found. Please sign up first.';
+    }
+    if (storedEmail != email) {
+      return 'Email does not match our records.';
+    }
+    if (storedPassword != password) {
+      return 'Incorrect password. Please try again.';
+    }
+
+    await prefs.setBool(_keyIsLoggedIn, true);
+    return null;
+  }
+
+  static Future<void> logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyIsLoggedIn, false);
+  }
+}
+
+// =============================================================================
+// MAIN ENTRY POINT
+// =============================================================================
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final loggedIn = await AuthService.isLoggedIn();
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) => TransactionProvider(),
+      child: FinanceApp(startLoggedIn: loggedIn),
+    ),
+  );
 }
 
 class FinanceApp extends StatelessWidget {
-  const FinanceApp({super.key});
+  final bool startLoggedIn;
+  const FinanceApp({super.key, required this.startLoggedIn});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Fin',
+      title: 'FinBlend',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark().copyWith(
         scaffoldBackgroundColor: const Color(0xFF121212),
@@ -22,7 +101,308 @@ class FinanceApp extends StatelessWidget {
         ),
         cardColor: const Color(0xFF1E1E1E),
       ),
-      home: const MainNavigationScreen(),
+      home: startLoggedIn ? const MainNavigationScreen() : const LoginScreen(),
+    );
+  }
+}
+
+// =============================================================================
+// AUTHENTICATION SCREENS
+// =============================================================================
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _obscurePassword = true;
+  bool _isLoading = false;
+
+  void _handleLogin() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _isLoading = true);
+
+    final errorMessage = await AuthService.login(
+      email: _emailController.text.trim(),
+      password: _passwordController.text,
+    );
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (errorMessage == null) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const MainNavigationScreen()),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error_outline, color: Colors.white),
+              const SizedBox(width: 12),
+              Expanded(child: Text(errorMessage, style: const TextStyle(color: Colors.white))),
+            ],
+          ),
+          backgroundColor: Colors.redAccent.shade700,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF121212),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Icon(Icons.account_balance_wallet, size: 64, color: Colors.tealAccent),
+                  const SizedBox(height: 16),
+                  const Text('Welcome to FinBlend', textAlign: TextAlign.center, style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white)),
+                  const SizedBox(height: 8),
+                  const Text('Log in to manage your finances', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
+                  const SizedBox(height: 36),
+                  TextFormField(
+                    controller: _emailController,
+                    style: const TextStyle(color: Colors.white),
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: InputDecoration(
+                      labelText: 'Email Address',
+                      prefixIcon: const Icon(Icons.email_outlined, color: Colors.tealAccent),
+                      filled: true,
+                      fillColor: const Color(0xFF1E1E1E),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                    ),
+                    validator: (val) {
+                      if (val == null || val.trim().isEmpty) return 'Enter your email';
+                      if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(val.trim())) return 'Enter a valid email address';
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _passwordController,
+                    style: const TextStyle(color: Colors.white),
+                    obscureText: _obscurePassword,
+                    decoration: InputDecoration(
+                      labelText: 'Password',
+                      prefixIcon: const Icon(Icons.lock_outline, color: Colors.tealAccent),
+                      suffixIcon: IconButton(
+                        icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility, color: Colors.grey),
+                        onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                      ),
+                      filled: true,
+                      fillColor: const Color(0xFF1E1E1E),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                    ),
+                    validator: (val) => (val == null || val.isEmpty) ? 'Enter your password' : null,
+                  ),
+                  const SizedBox(height: 28),
+                  ElevatedButton(
+                    onPressed: _isLoading ? null : _handleLogin,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.tealAccent,
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      disabledBackgroundColor: Colors.teal.shade900,
+                    ),
+                    child: _isLoading
+                        ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.tealAccent))
+                        : const Text('Log In', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text("Don't have an account?", style: TextStyle(color: Colors.grey)),
+                      TextButton(
+                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const RegisterScreen())),
+                        child: const Text('Sign Up', style: TextStyle(color: Colors.tealAccent, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class RegisterScreen extends StatefulWidget {
+  const RegisterScreen({super.key});
+
+  @override
+  State<RegisterScreen> createState() => _RegisterScreenState();
+}
+
+class _RegisterScreenState extends State<RegisterScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+  bool _obscurePassword = true;
+  bool _isLoading = false;
+
+  void _handleRegister() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _isLoading = true);
+    final errorMessage = await AuthService.register(
+      name: _nameController.text.trim(),
+      email: _emailController.text.trim(),
+      password: _passwordController.text,
+    );
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (errorMessage == null) {
+      Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const MainNavigationScreen()), (route) => false);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMessage)));
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF121212),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF121212),
+        elevation: 0,
+        leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.pop(context)),
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text('Create Account', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white)),
+                const SizedBox(height: 8),
+                const Text('Start tracking your daily expenses today', style: TextStyle(color: Colors.grey)),
+                const SizedBox(height: 32),
+                TextFormField(
+                  controller: _nameController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: 'Full Name',
+                    prefixIcon: const Icon(Icons.person_outline, color: Colors.tealAccent),
+                    filled: true,
+                    fillColor: const Color(0xFF1E1E1E),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  ),
+                  validator: (val) => (val == null || val.trim().isEmpty) ? 'Enter your full name' : null,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _emailController,
+                  style: const TextStyle(color: Colors.white),
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: InputDecoration(
+                    labelText: 'Email Address',
+                    prefixIcon: const Icon(Icons.email_outlined, color: Colors.tealAccent),
+                    filled: true,
+                    fillColor: const Color(0xFF1E1E1E),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  ),
+                  validator: (val) {
+                    if (val == null || val.trim().isEmpty) return 'Enter your email';
+                    if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(val.trim())) return 'Enter a valid email address';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _passwordController,
+                  style: const TextStyle(color: Colors.white),
+                  obscureText: _obscurePassword,
+                  decoration: InputDecoration(
+                    labelText: 'Password',
+                    prefixIcon: const Icon(Icons.lock_outline, color: Colors.tealAccent),
+                    suffixIcon: IconButton(
+                      icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility, color: Colors.grey),
+                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                    ),
+                    filled: true,
+                    fillColor: const Color(0xFF1E1E1E),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  ),
+                  validator: (val) {
+                    if (val == null || val.isEmpty) return 'Enter a password';
+                    if (val.length < 6) return 'Password must be at least 6 characters';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _confirmPasswordController,
+                  style: const TextStyle(color: Colors.white),
+                  obscureText: _obscurePassword,
+                  decoration: InputDecoration(
+                    labelText: 'Confirm Password',
+                    prefixIcon: const Icon(Icons.lock_reset, color: Colors.tealAccent),
+                    filled: true,
+                    fillColor: const Color(0xFF1E1E1E),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  ),
+                  validator: (val) => (val != _passwordController.text) ? 'Passwords do not match' : null,
+                ),
+                const SizedBox(height: 28),
+                ElevatedButton(
+                  onPressed: _isLoading ? null : _handleRegister,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.tealAccent,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    disabledBackgroundColor: Colors.teal.shade900,
+                  ),
+                  child: _isLoading
+                      ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.tealAccent))
+                      : const Text('Sign Up', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -39,6 +419,8 @@ class MainNavigationScreen extends StatefulWidget {
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
+  String _userName = 'Loading...';
+  String _userEmail = 'Loading...';
 
   final List<Widget> _pages = [
     const DashboardPage(),
@@ -48,20 +430,37 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _loadUserSession();
+  }
+
+  void _loadUserSession() async {
+    final user = await AuthService.getCurrentUser();
+    setState(() {
+      _userName = user['name']!;
+      _userEmail = user['email']!;
+    });
+  }
+
+  void _logoutUser() async {
+    await AuthService.logout();
+    if (mounted) {
+      Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const LoginScreen()), (route) => false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xFF121212),
         elevation: 0,
-        title: const Text('Finance', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
+        title: const Text('FinBlend', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
         centerTitle: true,
         actions: [
           IconButton(
-            icon: const CircleAvatar(
-              radius: 14,
-              backgroundColor: Colors.teal,
-              child: Icon(Icons.person, size: 18, color: Colors.white),
-            ),
+            icon: const CircleAvatar(radius: 14, backgroundColor: Colors.teal, child: Icon(Icons.person, size: 18, color: Colors.white)),
             onPressed: () => _showProfileDialog(context),
           ),
           const SizedBox(width: 8),
@@ -72,18 +471,18 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
-            const DrawerHeader(
-              decoration: BoxDecoration(
+            DrawerHeader(
+              decoration: const BoxDecoration(
                 gradient: LinearGradient(colors: [Color(0xFF1E1E1E), Color(0xFF121212)], begin: Alignment.topLeft, end: Alignment.bottomRight),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  Icon(Icons.account_balance_wallet, size: 48, color: Colors.tealAccent),
-                  SizedBox(height: 12),
-                  Text('Md Rifat Khan Rabbi', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                  Text('Personal & Business', style: TextStyle(color: Colors.grey, fontSize: 14)),
+                  const Icon(Icons.account_balance_wallet, size: 48, color: Colors.tealAccent),
+                  const SizedBox(height: 12),
+                  Text(_userName, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text(_userEmail, style: const TextStyle(color: Colors.grey, fontSize: 14)),
                 ],
               ),
             ),
@@ -91,6 +490,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             _buildDrawerItem(context, Icons.people_alt_outlined, 'Friends', const FriendsPage()),
             _buildDrawerItem(context, Icons.category_outlined, 'Categories & Labels', const CategoriesPage()),
             _buildDrawerItem(context, Icons.update, 'Scheduled Transactions', const ScheduledPage()),
+            const Divider(color: Colors.white12, thickness: 1, height: 24),
+            ListTile(
+              leading: const Icon(Icons.logout, color: Colors.redAccent),
+              title: const Text('Log Out', style: TextStyle(color: Colors.redAccent, fontSize: 16)),
+              onTap: _logoutUser,
+            ),
           ],
         ),
       ),
@@ -116,7 +521,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       title: Text(title, style: const TextStyle(color: Colors.white, fontSize: 16)),
       trailing: const Icon(Icons.chevron_right, color: Colors.white24),
       onTap: () {
-        Navigator.pop(context); // Close drawer
+        Navigator.pop(context);
         Navigator.push(context, MaterialPageRoute(builder: (context) => page));
       },
     );
@@ -128,7 +533,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1E1E1E),
         title: const Text('Profile'),
-        content: const Text('Name: Md Rifat Khan Rabbi\nEmail: md.khanrabbi@northsouth.edu\n\n(Account Settings Placeholder)'),
+        content: Text('Name: $_userName\nEmail: $_userEmail\nStatus: Active Session'),
         actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close', style: TextStyle(color: Colors.tealAccent)))],
       ),
     );
@@ -136,17 +541,17 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 }
 
 // =============================================================================
-// 2. DASHBOARD / HOME
+// DASHBOARD (DYNAMIC PROVIDER INTEGRATION)
 // =============================================================================
 class DashboardPage extends StatelessWidget {
   const DashboardPage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final txProvider = context.watch<TransactionProvider>();
     return ListView(
       padding: const EdgeInsets.all(16.0),
       children: [
-        // Balance Card
         Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(colors: [Colors.teal.shade900, const Color(0xFF1E1E1E)], begin: Alignment.topLeft, end: Alignment.bottomRight),
@@ -158,22 +563,20 @@ class DashboardPage extends StatelessWidget {
             children: [
               const Text('Total Balance', style: TextStyle(color: Colors.white70, fontSize: 16)),
               const SizedBox(height: 8),
-              const Text('৳ 42,500.00', style: TextStyle(color: Colors.white, fontSize: 40, fontWeight: FontWeight.bold)),
+              Text('৳ ${txProvider.totalBalance.toStringAsFixed(2)}', style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.bold)),
               const SizedBox(height: 24),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  _buildStatColumn('Income', '+ ৳ 50,000', Colors.greenAccent),
+                  _buildStatColumn('Income', '+ ৳ ${txProvider.totalIncome.toStringAsFixed(0)}', Colors.greenAccent),
                   Container(width: 1, height: 40, color: Colors.white24),
-                  _buildStatColumn('Expenses', '- ৳ 7,500', Colors.redAccent),
+                  _buildStatColumn('Expenses', '- ৳ ${txProvider.totalExpense.toStringAsFixed(0)}', Colors.redAccent),
                 ],
               ),
             ],
           ),
         ),
         const SizedBox(height: 32),
-
-        // Quick Actions
         const Text('Quick Actions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
         const SizedBox(height: 16),
         Row(
@@ -185,21 +588,14 @@ class DashboardPage extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 32),
-
-        // Recent Transactions
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text('Recent Transactions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
-            TextButton(
-              onPressed: () => DefaultTabController.of(context).animateTo(1), // Navigates to Transactions Tab (simulated)
-              child: const Text('See All', style: TextStyle(color: Colors.tealAccent)),
-            ),
+            TextButton(onPressed: () {}, child: const Text('See All', style: TextStyle(color: Colors.tealAccent))),
           ],
         ),
-        _buildTxItem(context, Icons.restaurant, 'Foodpanda - Beef Rezala', 'Today, 6:15 AM', '- ৳ 450', Colors.orange),
-        _buildTxItem(context, Icons.shopping_bag, 'Grocery Store', 'Yesterday', '- ৳ 1,200', Colors.pink),
-        _buildTxItem(context, Icons.account_balance, 'Salary Deposit', 'Oct 1', '+ ৳ 50,000', Colors.green),
+        ...txProvider.transactions.take(5).map((tx) => _buildTxItem(context, tx.icon, tx.title, '${tx.subtitle} • ${tx.date}', '${tx.isExpense ? '- ' : '+ '}৳ ${tx.amount.toStringAsFixed(0)}', tx.color)),
       ],
     );
   }
@@ -228,25 +624,35 @@ class DashboardPage extends StatelessWidget {
   }
 
   void _showTransactionSheet(BuildContext context, String type) {
+    final amountController = TextEditingController();
+    final noteController = TextEditingController();
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: const Color(0xFF1E1E1E),
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) => Padding(
-        padding: const EdgeInsets.all(24.0),
+      builder: (sheetContext) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24, left: 24, right: 24, top: 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text('Add $type', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
             const SizedBox(height: 16),
-            const TextField(decoration: InputDecoration(labelText: 'Amount (৳)', border: OutlineInputBorder())),
+            TextField(controller: amountController, keyboardType: TextInputType.number, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'Amount (৳)', border: OutlineInputBorder())),
             const SizedBox(height: 12),
-            const TextField(decoration: InputDecoration(labelText: 'Category / Note', border: OutlineInputBorder())),
+            TextField(controller: noteController, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'Category / Note', border: OutlineInputBorder())),
             const SizedBox(height: 24),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.tealAccent, foregroundColor: Colors.black, padding: const EdgeInsets.symmetric(vertical: 16)),
-              onPressed: () => Navigator.pop(context),
+              onPressed: () {
+                final enteredAmount = double.tryParse(amountController.text.trim()) ?? 0.0;
+                final enteredNote = noteController.text.trim().isEmpty ? '$type Entry' : noteController.text.trim();
+                if (enteredAmount > 0) {
+                  context.read<TransactionProvider>().addTransaction(title: enteredNote, category: type, amount: enteredAmount, isExpense: type == 'Expense');
+                  Navigator.pop(sheetContext);
+                }
+              },
               child: const Text('Save Transaction', style: TextStyle(fontWeight: FontWeight.bold)),
             )
           ],
@@ -257,13 +663,14 @@ class DashboardPage extends StatelessWidget {
 }
 
 // =============================================================================
-// 3. TRANSACTIONS
+// TRANSACTIONS PAGE
 // =============================================================================
 class TransactionsPage extends StatelessWidget {
   const TransactionsPage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final txProvider = context.watch<TransactionProvider>();
     return ListView(
       padding: const EdgeInsets.all(16.0),
       children: [
@@ -283,19 +690,14 @@ class TransactionsPage extends StatelessWidget {
             const SizedBox(width: 12),
             Container(
               decoration: BoxDecoration(color: const Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(12)),
-              child: IconButton(
-                icon: const Icon(Icons.filter_list, color: Colors.tealAccent),
-                onPressed: () => _showFilterSheet(context),
-              ),
+              child: IconButton(icon: const Icon(Icons.filter_list, color: Colors.tealAccent), onPressed: () => _showFilterSheet(context)),
             ),
           ],
         ),
         const SizedBox(height: 24),
-        const Text('October 2026', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+        const Text('All Records', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
-        _buildTxItem(context, Icons.restaurant, 'Foodpanda - Bhuna Khichuri', 'Food & Drink • Cash', '- ৳ 320', Colors.orange),
-        _buildTxItem(context, Icons.directions_car, 'Uber Ride', 'Transport • Card', '- ৳ 450', Colors.blue),
-        _buildTxItem(context, Icons.attach_money, 'Client Payment', 'Income • Bank', '+ ৳ 15,000', Colors.green),
+        ...txProvider.transactions.map((tx) => _buildTxItem(context, tx.icon, tx.title, '${tx.subtitle} • ${tx.date}', '${tx.isExpense ? '- ' : '+ '}৳ ${tx.amount.toStringAsFixed(0)}', tx.color)),
       ],
     );
   }
@@ -324,7 +726,11 @@ class TransactionsPage extends StatelessWidget {
             const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton(onPressed: () => Navigator.pop(context), style: ElevatedButton.styleFrom(backgroundColor: Colors.tealAccent, foregroundColor: Colors.black), child: const Text('Apply Filters')),
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.tealAccent, foregroundColor: Colors.black),
+                child: const Text('Apply Filters'),
+              ),
             )
           ],
         ),
@@ -344,18 +750,13 @@ Widget _buildTxItem(BuildContext context, IconData icon, String title, String su
       subtitle: Text(subtitle, style: const TextStyle(color: Colors.grey, fontSize: 13)),
       trailing: Text(amount, style: TextStyle(color: amount.startsWith('+') ? Colors.greenAccent : Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
       onTap: () {
-        // Show Transaction Details
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
             backgroundColor: const Color(0xFF1E1E1E),
             title: const Text('Transaction Details'),
-            content: Text('Amount: $amount\nCategory: $subtitle\nDesc: $title\nDate: Oct 4, 2026'),
-            actions: [
-              TextButton(onPressed: () {}, child: const Text('Edit', style: TextStyle(color: Colors.blueAccent))),
-              TextButton(onPressed: () {}, child: const Text('Delete', style: TextStyle(color: Colors.redAccent))),
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close', style: TextStyle(color: Colors.tealAccent))),
-            ],
+            content: Text('Amount: $amount\nCategory: $subtitle\nDesc: $title'),
+            actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close', style: TextStyle(color: Colors.tealAccent)))],
           ),
         );
       },
@@ -364,7 +765,7 @@ Widget _buildTxItem(BuildContext context, IconData icon, String title, String su
 }
 
 // =============================================================================
-// 4. BUDGETS
+// BUDGETS PAGE
 // =============================================================================
 class BudgetsPage extends StatelessWidget {
   const BudgetsPage({super.key});
@@ -420,7 +821,7 @@ class BudgetsPage extends StatelessWidget {
 }
 
 // =============================================================================
-// 6. GROUPS
+// GROUPS PAGE
 // =============================================================================
 class GroupsPage extends StatelessWidget {
   const GroupsPage({super.key});
@@ -445,7 +846,7 @@ class GroupsPage extends StatelessWidget {
         const Text('My Groups', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
         const SizedBox(height: 12),
         _buildGroupItem(context, 'Apartment 4B', 'You owe: ৳ 450', Colors.redAccent, Icons.home, Colors.teal),
-        _buildGroupItem(context, 'Cox\'s Bazar Trip', 'You are owed: ৳ 2,100', Colors.greenAccent, Icons.flight, Colors.deepPurple),
+        _buildGroupItem(context, "Cox's Bazar Trip", 'You are owed: ৳ 2,100', Colors.greenAccent, Icons.flight, Colors.deepPurple),
       ],
     );
   }
@@ -470,9 +871,8 @@ class GroupsPage extends StatelessWidget {
 }
 
 // =============================================================================
-// DRAWER SUB-PAGES (5. Wallets, 7. Friends, 9. Categories, 10. Scheduled)
+// DRAWER SUB-PAGES
 // =============================================================================
-
 class WalletsPage extends StatelessWidget {
   const WalletsPage({super.key});
   @override
@@ -566,9 +966,8 @@ Widget _buildDetailCard(String title, String subtitle, IconData icon, Color icon
 }
 
 // =============================================================================
-// HELPER SHEETS FOR ADD / CREATE ACTIONS
+// BOTTOM SHEETS
 // =============================================================================
-
 void _showCreateGroupSheet(BuildContext context) {
   _buildGenericBottomSheet(context, 'Create New Group', ['Group Name', 'Members (comma separated)'], 'Create Group');
 }
