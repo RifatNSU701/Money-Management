@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
-import 'main.dart'; // To access Auth and Login Screen
+import 'main.dart';
 import 'dashboard.dart';
-import 'business_navigation.dart'; // Imports the new Business Mode
+import 'business_navigation.dart';
+import 'records_screen.dart';
+import 'budgets_screen.dart';
+import 'groups_screen.dart';
+import 'categories_screen.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
@@ -15,14 +19,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   String _userName = 'Loading...';
   String _userEmail = 'Loading...';
 
-  final List<Widget> _pages = [
-    const DashboardScreen(),
-    const PlaceholderScreen(title: 'Records & Filtering (Next Step)'),
-    const PlaceholderScreen(title: 'Budgets & Pie Charts (Next Step)'),
-    const PlaceholderScreen(title: 'Groups & Splitting (Next Step)'),
-    const PlaceholderScreen(title: 'Categories & Labels (Next Step)'),
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -35,6 +31,19 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       _userName = user['name']!;
       _userEmail = user['email']!;
     });
+  }
+
+  // FIX: This dynamic function replaces the old _pages array,
+  // allowing the Dashboard to use setState to navigate to Records.
+  Widget _buildPage(int index) {
+    switch (index) {
+      case 0: return DashboardScreen(onSeeAll: () => setState(() => _currentIndex = 1));
+      case 1: return const RecordsScreen();
+      case 2: return const BudgetsScreen();
+      case 3: return const GroupsScreen();
+      case 4: return const CategoriesScreen();
+      default: return DashboardScreen(onSeeAll: () => setState(() => _currentIndex = 1));
+    }
   }
 
   @override
@@ -62,7 +71,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           ),
         ],
       ),
-      body: _pages[_currentIndex],
+      // FIX: Call the new function here
+      body: _buildPage(_currentIndex),
       bottomNavigationBar: NavigationBar(
         backgroundColor: const Color(0xFF161616),
         indicatorColor: Colors.tealAccent.withValues(alpha: 0.2),
@@ -104,9 +114,6 @@ class ProfileScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         children: [
-          // =========================================================
-          // BUSINESS MODE SWITCHER BANNER
-          // =========================================================
           GestureDetector(
             onTap: () {
               Navigator.pushAndRemoveUntil(
@@ -142,8 +149,6 @@ class ProfileScreen extends StatelessWidget {
               ),
             ),
           ),
-
-          // 1. PROFILE HEADER
           Row(
             children: [
               const CircleAvatar(radius: 36, backgroundColor: Colors.teal, child: Icon(Icons.person, size: 40, color: Colors.white)),
@@ -162,8 +167,6 @@ class ProfileScreen extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 36),
-
-          // 2. FINANCES GROUP
           _buildSectionHeader('Finances'),
           _buildSettingsGroup([
             _buildSettingsTile(Icons.account_balance_wallet_outlined, 'Wallets & Accounts', trailingText: '3'),
@@ -171,8 +174,6 @@ class ProfileScreen extends StatelessWidget {
             _buildSettingsTile(Icons.update, 'Scheduled Transactions'),
           ]),
           const SizedBox(height: 24),
-
-          // 3. PREFERENCES GROUP
           _buildSectionHeader('Preferences'),
           _buildSettingsGroup([
             _buildSettingsTile(Icons.palette_outlined, 'Appearance', trailingText: 'Dark'),
@@ -180,8 +181,6 @@ class ProfileScreen extends StatelessWidget {
             _buildSettingsTile(Icons.security, 'Security'),
           ]),
           const SizedBox(height: 24),
-
-          // 4. TOOLS & DATA GROUP
           _buildSectionHeader('Tools & Data'),
           _buildSettingsGroup([
             _buildSettingsTile(Icons.qr_code_scanner, 'Scan Code'),
@@ -189,8 +188,6 @@ class ProfileScreen extends StatelessWidget {
             _buildSettingsTile(Icons.import_export, 'Export Data'),
           ]),
           const SizedBox(height: 24),
-
-          // 5. HELP & SUPPORT GROUP
           _buildSectionHeader('Help & Support'),
           _buildSettingsGroup([
             _buildSettingsTile(Icons.help_outline, 'Help Center'),
@@ -198,8 +195,6 @@ class ProfileScreen extends StatelessWidget {
             _buildSettingsTile(Icons.description_outlined, 'Terms and Policies'),
           ]),
           const SizedBox(height: 40),
-
-          // 6. LOGOUT BUTTON
           GestureDetector(
             onTap: () async {
               await AuthService.logout();
@@ -230,7 +225,6 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  // HELPER WIDGETS FOR CLEAN UI
   Widget _buildSectionHeader(String title) {
     return Padding(
       padding: const EdgeInsets.only(left: 8, bottom: 8),
@@ -249,7 +243,7 @@ class ProfileScreen extends StatelessWidget {
         children: tiles.asMap().entries.map((entry) {
           int index = entry.key;
           Widget tile = entry.value;
-          if (index != tiles.length - 1) { // Fixed typo here
+          if (index != tiles.length - 1) {
             return Column(
               children: [
                 tile,
@@ -278,31 +272,7 @@ class ProfileScreen extends StatelessWidget {
           const Icon(Icons.chevron_right, color: Colors.white30, size: 20),
         ],
       ),
-      onTap: () {}, // Ready for navigation routing
-    );
-  }
-}
-
-// =============================================================================
-// TEMPORARY VISUAL PLACEHOLDER
-// =============================================================================
-class PlaceholderScreen extends StatelessWidget {
-  final String title;
-  const PlaceholderScreen({super.key, required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.construction, size: 64, color: Colors.tealAccent),
-          const SizedBox(height: 16),
-          Text(title, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          const Text('Premium UI & Dynamic Charts coming next...', style: TextStyle(color: Colors.grey)),
-        ],
-      ),
+      onTap: () {},
     );
   }
 }
