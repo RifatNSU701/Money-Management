@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
-import 'main.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'main.dart' hide TransactionProvider;
 import 'dashboard.dart';
 import 'business_navigation.dart';
 import 'records_screen.dart';
 import 'budgets_screen.dart';
 import 'groups_screen.dart';
 import 'categories_screen.dart';
+import 'wallets_screen.dart';
+import 'providers/transaction_provider.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
@@ -33,16 +37,20 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     });
   }
 
-  // FIX: This dynamic function replaces the old _pages array,
-  // allowing the Dashboard to use setState to navigate to Records.
   Widget _buildPage(int index) {
     switch (index) {
-      case 0: return DashboardScreen(onSeeAll: () => setState(() => _currentIndex = 1));
-      case 1: return const RecordsScreen();
-      case 2: return const BudgetsScreen();
-      case 3: return const GroupsScreen();
-      case 4: return const CategoriesScreen();
-      default: return DashboardScreen(onSeeAll: () => setState(() => _currentIndex = 1));
+      case 0:
+        return DashboardScreen(onSeeAll: () => setState(() => _currentIndex = 1));
+      case 1:
+        return const RecordsScreen();
+      case 2:
+        return const BudgetsScreen();
+      case 3:
+        return const GroupsScreen();
+      case 4:
+        return const CategoriesScreen();
+      default:
+        return DashboardScreen(onSeeAll: () => setState(() => _currentIndex = 1));
     }
   }
 
@@ -58,10 +66,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           Padding(
             padding: const EdgeInsets.only(right: 16.0),
             child: GestureDetector(
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => ProfileScreen(userName: _userName, userEmail: _userEmail)),
-              ),
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => ProfileScreen(userName: _userName, userEmail: _userEmail)),
+                );
+                _loadUserSession();
+              },
               child: const CircleAvatar(
                 radius: 18,
                 backgroundColor: Colors.teal,
@@ -71,7 +82,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           ),
         ],
       ),
-      // FIX: Call the new function here
       body: _buildPage(_currentIndex),
       bottomNavigationBar: NavigationBar(
         backgroundColor: const Color(0xFF161616),
@@ -91,29 +101,45 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 }
 
 // =============================================================================
-// PREMIUM PROFILE & SETTINGS SCREEN
+// FULLY FUNCTIONAL PROFILE & SETTINGS SCREEN
 // =============================================================================
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   final String userName;
   final String userEmail;
 
   const ProfileScreen({super.key, required this.userName, required this.userEmail});
 
   @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  late String _name;
+  late String _email;
+  bool _notificationsEnabled = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _name = widget.userName;
+    _email = widget.userEmail;
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final txProvider = context.watch<TransactionProvider>();
+
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
         backgroundColor: const Color(0xFF121212),
         elevation: 0,
         title: const Text('Account', style: TextStyle(fontWeight: FontWeight.bold)),
-        actions: [
-          IconButton(icon: const Icon(Icons.search, color: Colors.white), onPressed: () {}),
-        ],
       ),
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         children: [
+          // BUSINESS MODE SWITCHER
           GestureDetector(
             onTap: () {
               Navigator.pushAndRemoveUntil(
@@ -129,7 +155,6 @@ class ProfileScreen extends StatelessWidget {
                 gradient: const LinearGradient(colors: [Color(0xFF0F2027), Color(0xFF203A43)]),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: Colors.tealAccent.withValues(alpha: 0.3)),
-                boxShadow: [BoxShadow(color: Colors.tealAccent.withValues(alpha: 0.1), blurRadius: 10, offset: const Offset(0, 5))],
               ),
               child: const Row(
                 children: [
@@ -149,6 +174,8 @@ class ProfileScreen extends StatelessWidget {
               ),
             ),
           ),
+
+          // 1. PROFILE HEADER
           Row(
             children: [
               const CircleAvatar(radius: 36, backgroundColor: Colors.teal, child: Icon(Icons.person, size: 40, color: Colors.white)),
@@ -157,44 +184,127 @@ class ProfileScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(userName, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+                    Text(_name, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 4),
-                    Text(userEmail, style: const TextStyle(color: Colors.grey, fontSize: 14)),
+                    Text(_email, style: const TextStyle(color: Colors.grey, fontSize: 14)),
                   ],
                 ),
               ),
-              TextButton(onPressed: () {}, child: const Text('Edit', style: TextStyle(color: Colors.tealAccent, fontSize: 16))),
+              TextButton(
+                onPressed: () => _showEditProfileSheet(context),
+                child: const Text('Edit', style: TextStyle(color: Colors.tealAccent, fontSize: 16)),
+              ),
             ],
           ),
           const SizedBox(height: 36),
+
+          // 2. FINANCES GROUP
           _buildSectionHeader('Finances'),
           _buildSettingsGroup([
-            _buildSettingsTile(Icons.account_balance_wallet_outlined, 'Wallets & Accounts', trailingText: '3'),
-            _buildSettingsTile(Icons.category_outlined, 'Categories & Labels'),
-            _buildSettingsTile(Icons.update, 'Scheduled Transactions'),
+            _buildSettingsTile(
+              Icons.account_balance_wallet_outlined,
+              'Wallets & Accounts',
+              trailingText: '${txProvider.wallets.length}',
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WalletsScreen())),
+            ),
+            _buildSettingsTile(
+              Icons.category_outlined,
+              'Categories & Labels',
+              trailingText: '${txProvider.expenseCategories.length + txProvider.incomeCategories.length}',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => Scaffold(
+                    backgroundColor: const Color(0xFF121212),
+                    appBar: AppBar(backgroundColor: const Color(0xFF121212), title: const Text('Categories & Labels')),
+                    body: const CategoriesScreen(),
+                  ),
+                ),
+              ),
+            ),
+            _buildSettingsTile(
+              Icons.update,
+              'Scheduled Transactions',
+              trailingText: '${txProvider.scheduledTxs.length}',
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ScheduledTransactionsScreen())),
+            ),
           ]),
           const SizedBox(height: 24),
+
+          // 3. PREFERENCES GROUP
           _buildSectionHeader('Preferences'),
           _buildSettingsGroup([
-            _buildSettingsTile(Icons.palette_outlined, 'Appearance', trailingText: 'Dark'),
-            _buildSettingsTile(Icons.notifications_none, 'Notifications'),
-            _buildSettingsTile(Icons.security, 'Security'),
+            _buildSettingsTile(
+              Icons.palette_outlined,
+              'Appearance',
+              trailingText: 'Premium Dark',
+              onTap: () => _showInfoDialog(context, 'Appearance', 'FinBlend uses an OLED-optimized Dark Theme by default.'),
+            ),
+            _buildSettingsTile(
+              Icons.notifications_none,
+              'Notifications',
+              trailingText: _notificationsEnabled ? 'On' : 'Off',
+              onTap: () => setState(() => _notificationsEnabled = !_notificationsEnabled),
+            ),
+            _buildSettingsTile(
+              Icons.security,
+              'Security',
+              trailingText: 'Active',
+              onTap: () => _showInfoDialog(context, 'Security', 'Your session and local financial database are protected on this device.'),
+            ),
           ]),
           const SizedBox(height: 24),
+
+          // 4. TOOLS & DATA GROUP
           _buildSectionHeader('Tools & Data'),
           _buildSettingsGroup([
-            _buildSettingsTile(Icons.qr_code_scanner, 'Scan Code'),
-            _buildSettingsTile(Icons.calculate_outlined, 'CalcBox'),
-            _buildSettingsTile(Icons.import_export, 'Export Data'),
+            _buildSettingsTile(
+              Icons.qr_code_scanner,
+              'Scan Code',
+              onTap: () => _showInfoDialog(context, 'QR Code Hub', 'Share your FinBlend ID ($_email) with friends to split group expenses.'),
+            ),
+            _buildSettingsTile(
+              Icons.calculate_outlined,
+              'CalcBox',
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CalcBoxScreen())),
+            ),
+            _buildSettingsTile(
+              Icons.import_export,
+              'Export Data',
+              onTap: () => _showInfoDialog(
+                context,
+                'Financial Summary Export',
+                'Total Personal Balance: ৳ ${txProvider.totalBalance.toStringAsFixed(0)}\n'
+                    'Total Wallets Balance: ৳ ${txProvider.totalWalletsBalance.toStringAsFixed(0)}\n'
+                    'Recorded Transactions: ${txProvider.transactions.length}\n'
+                    'Business Net Profit: ৳ ${txProvider.netProfit.toStringAsFixed(0)}',
+              ),
+            ),
           ]),
           const SizedBox(height: 24),
+
+          // 5. HELP & SUPPORT GROUP
           _buildSectionHeader('Help & Support'),
           _buildSettingsGroup([
-            _buildSettingsTile(Icons.help_outline, 'Help Center'),
-            _buildSettingsTile(Icons.chat_bubble_outline, 'Contact Support'),
-            _buildSettingsTile(Icons.description_outlined, 'Terms and Policies'),
+            _buildSettingsTile(
+              Icons.help_outline,
+              'Help Center',
+              onTap: () => _showInfoDialog(context, 'Help Center', 'Tap any record, budget, product, or party across the app to edit or delete it.'),
+            ),
+            _buildSettingsTile(
+              Icons.chat_bubble_outline,
+              'Contact Support',
+              onTap: () => _showInfoDialog(context, 'Support', 'Need assistance? Reach out at support@finblend.app'),
+            ),
+            _buildSettingsTile(
+              Icons.description_outlined,
+              'Terms and Policies',
+              onTap: () => _showInfoDialog(context, 'Terms & Privacy', 'All financial records are stored locally on your phone for maximum privacy.'),
+            ),
           ]),
           const SizedBox(height: 40),
+
+          // 6. LOGOUT BUTTON
           GestureDetector(
             onTap: () async {
               await AuthService.logout();
@@ -220,6 +330,62 @@ class ProfileScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 40),
+        ],
+      ),
+    );
+  }
+
+  void _showEditProfileSheet(BuildContext context) {
+    final nameCtrl = TextEditingController(text: _name);
+    final emailCtrl = TextEditingController(text: _email);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF161616),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom + 24, left: 24, right: 24, top: 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text('Edit Profile', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            TextField(controller: nameCtrl, style: const TextStyle(color: Colors.white), decoration: InputDecoration(hintText: 'Full Name', filled: true, fillColor: const Color(0xFF1E1E1E), border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none))),
+            const SizedBox(height: 12),
+            TextField(controller: emailCtrl, style: const TextStyle(color: Colors.white), decoration: InputDecoration(hintText: 'Email Address', filled: true, fillColor: const Color(0xFF1E1E1E), border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none))),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.tealAccent, foregroundColor: Colors.black, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+              onPressed: () async {
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setString('user_name', nameCtrl.text.trim());
+                await prefs.setString('user_email', emailCtrl.text.trim());
+                setState(() {
+                  _name = nameCtrl.text.trim();
+                  _email = emailCtrl.text.trim();
+                });
+                if (ctx.mounted) Navigator.pop(ctx);
+              },
+              child: const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showInfoDialog(BuildContext context, String title, String message) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: Text(message, style: const TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK', style: TextStyle(color: Colors.tealAccent))),
         ],
       ),
     );
@@ -257,7 +423,7 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSettingsTile(IconData icon, String title, {String? trailingText}) {
+  Widget _buildSettingsTile(IconData icon, String title, {String? trailingText, required VoidCallback onTap}) {
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       leading: Icon(icon, color: Colors.white70, size: 26),
@@ -265,14 +431,12 @@ class ProfileScreen extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (trailingText != null)
-            Text(trailingText, style: const TextStyle(color: Colors.grey, fontSize: 14)),
-          if (trailingText != null)
-            const SizedBox(width: 8),
+          if (trailingText != null) Text(trailingText, style: const TextStyle(color: Colors.grey, fontSize: 14)),
+          if (trailingText != null) const SizedBox(width: 8),
           const Icon(Icons.chevron_right, color: Colors.white30, size: 20),
         ],
       ),
-      onTap: () {},
+      onTap: onTap,
     );
   }
 }
