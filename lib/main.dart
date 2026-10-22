@@ -1,78 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'providers/transaction_provider.dart';
 import 'main_navigation.dart';
+import 'providers/transaction_provider.dart';
 
-// =============================================================================
-// STRICT AUTHENTICATION & SESSION SERVICE
-// =============================================================================
-class AuthService {
-  static const String _keyIsLoggedIn = 'is_logged_in';
-  static const String _keyUserName = 'user_name';
-  static const String _keyUserEmail = 'user_email';
-  static const String _keyUserPassword = 'user_password';
-
-  static Future<bool> isLoggedIn() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_keyIsLoggedIn) ?? false;
-  }
-
-  static Future<Map<String, String>> getCurrentUser() async {
-    final prefs = await SharedPreferences.getInstance();
-    return {
-      'name': prefs.getString(_keyUserName) ?? 'Guest User',
-      'email': prefs.getString(_keyUserEmail) ?? 'Not logged in',
-    };
-  }
-
-  static Future<String?> register({required String name, required String email, required String password}) async {
-    await Future.delayed(const Duration(milliseconds: 800));
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyUserName, name);
-    await prefs.setString(_keyUserEmail, email);
-    await prefs.setString(_keyUserPassword, password);
-    await prefs.setBool(_keyIsLoggedIn, true);
-    return null;
-  }
-
-  static Future<String?> login({required String email, required String password}) async {
-    await Future.delayed(const Duration(milliseconds: 800));
-    final prefs = await SharedPreferences.getInstance();
-    final storedEmail = prefs.getString(_keyUserEmail);
-    final storedPassword = prefs.getString(_keyUserPassword);
-
-    if (storedEmail == null || storedEmail.isEmpty) return 'No account found. Please sign up first.';
-    if (storedEmail != email) return 'Email does not match our records.';
-    if (storedPassword != password) return 'Incorrect password. Please try again.';
-
-    await prefs.setBool(_keyIsLoggedIn, true);
-    return null;
-  }
-
-  static Future<void> logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_keyIsLoggedIn, false);
-  }
-}
-
-// =============================================================================
-// MAIN ENTRY POINT
-// =============================================================================
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  final loggedIn = await AuthService.isLoggedIn();
   runApp(
     ChangeNotifierProvider(
       create: (_) => TransactionProvider(),
-      child: FinanceApp(startLoggedIn: loggedIn),
+      child: const FinBlendApp(),
     ),
   );
 }
 
-class FinanceApp extends StatelessWidget {
-  final bool startLoggedIn;
-  const FinanceApp({super.key, required this.startLoggedIn});
+class FinBlendApp extends StatelessWidget {
+  const FinBlendApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -103,51 +46,107 @@ class FinanceApp extends StatelessWidget {
           child: child,
         );
       },
-      home: const LoginScreen(), // Keep your existing home widget name here (e.g., AuthGate or LoginScreen)
+      home: const AuthGate(),
     );
   }
 }
 
 // =============================================================================
-// AUTHENTICATION SCREENS
+// AUTHENTICATION SERVICE & SESSION GATE
+// =============================================================================
+class AuthService {
+  static Future<bool> isLoggedIn() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('is_logged_in') ?? false;
+  }
+
+  static Future<void> login(String name, String email) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('is_logged_in', true);
+    await prefs.setString('user_name', name);
+    await prefs.setString('user_email', email);
+  }
+
+  static Future<void> logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('is_logged_in', false);
+  }
+
+  static Future<Map<String, String>> getCurrentUser() async {
+    final prefs = await SharedPreferences.getInstance();
+    return {
+      'name': prefs.getString('user_name') ?? 'FinBlend User',
+      'email': prefs.getString('user_email') ?? 'user@finblend.app',
+    };
+  }
+}
+
+class AuthGate extends StatefulWidget {
+  const AuthGate({super.key});
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  bool? _loggedIn;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkStatus();
+  }
+
+  Future<void> _checkStatus() async {
+    final status = await AuthService.isLoggedIn();
+    if (mounted) setState(() => _loggedIn = status);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loggedIn == null) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF121212),
+        body: Center(child: CircularProgressIndicator(color: Colors.tealAccent)),
+      );
+    }
+    return _loggedIn! ? const MainNavigationScreen() : const LoginScreen();
+  }
+}
+
+// =============================================================================
+// LOGIN & REGISTRATION SCREEN
 // =============================================================================
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
+
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  bool _obscurePassword = true;
-  bool _isLoading = false;
+  bool _isLogin = true;
+  final _nameCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _passCtrl = TextEditingController();
 
-  void _handleLogin() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() => _isLoading = true);
+  Future<void> _submit() async {
+    final email = _emailCtrl.text.trim();
+    final pass = _passCtrl.text.trim();
+    final name = _nameCtrl.text.trim().isEmpty ? email.split('@').first : _nameCtrl.text.trim();
 
-    final errorMessage = await AuthService.login(email: _emailController.text.trim(), password: _passwordController.text);
-
-    if (!mounted) return;
-    setState(() => _isLoading = false);
-
-    if (errorMessage == null) {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const MainNavigationScreen()));
-    } else {
+    if (email.isEmpty || pass.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.error_outline, color: Colors.white),
-              const SizedBox(width: 12),
-              Expanded(child: Text(errorMessage, style: const TextStyle(color: Colors.white))),
-            ],
-          ),
-          backgroundColor: Colors.redAccent.shade700,
-          behavior: SnackBarBehavior.floating,
-        ),
+        const SnackBar(content: Text('Please enter your email and password')),
+      );
+      return;
+    }
+
+    await AuthService.login(name, email);
+    if (mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
       );
     }
   }
@@ -156,107 +155,90 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Icon(Icons.account_balance_wallet, size: 64, color: Colors.tealAccent),
-                  const SizedBox(height: 16),
-                  const Text('Welcome to FinBlend', textAlign: TextAlign.center, style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white)),
-                  const SizedBox(height: 8),
-                  const Text('Log in to manage your finances', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
-                  const SizedBox(height: 36),
-                  TextFormField(
-                    controller: _emailController,
-                    style: const TextStyle(color: Colors.white),
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: InputDecoration(labelText: 'Email Address', prefixIcon: const Icon(Icons.email_outlined, color: Colors.tealAccent), filled: true, fillColor: const Color(0xFF1E1E1E), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
-                    validator: (val) => (val == null || val.trim().isEmpty) ? 'Enter your email' : null,
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _passwordController,
-                    style: const TextStyle(color: Colors.white),
-                    obscureText: _obscurePassword,
-                    decoration: InputDecoration(labelText: 'Password', prefixIcon: const Icon(Icons.lock_outline, color: Colors.tealAccent), suffixIcon: IconButton(icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility, color: Colors.grey), onPressed: () => setState(() => _obscurePassword = !_obscurePassword)), filled: true, fillColor: const Color(0xFF1E1E1E), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
-                    validator: (val) => (val == null || val.isEmpty) ? 'Enter your password' : null,
-                  ),
-                  const SizedBox(height: 28),
-                  ElevatedButton(
-                    onPressed: _isLoading ? null : _handleLogin,
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.tealAccent, foregroundColor: Colors.black, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), disabledBackgroundColor: Colors.teal.shade900),
-                    child: _isLoading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.tealAccent)) : const Text('Log In', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  ),
-                  const SizedBox(height: 16),
-                  TextButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const RegisterScreen())), child: const Text('Sign Up', style: TextStyle(color: Colors.tealAccent, fontWeight: FontWeight.bold))),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({super.key});
-  @override
-  State<RegisterScreen> createState() => _RegisterScreenState();
-}
-
-class _RegisterScreenState extends State<RegisterScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _confirmPasswordController = TextEditingController();
-  bool _obscurePassword = true;
-  bool _isLoading = false;
-
-  void _handleRegister() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() => _isLoading = true);
-    final errorMessage = await AuthService.register(name: _nameController.text.trim(), email: _emailController.text.trim(), password: _passwordController.text);
-    if (!mounted) return;
-    setState(() => _isLoading = false);
-
-    if (errorMessage == null) {
-      Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const MainNavigationScreen()), (route) => false);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMessage)));
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF121212),
-      appBar: AppBar(backgroundColor: const Color(0xFF121212), elevation: 0, leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.pop(context))),
-      body: SafeArea(
+      body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0),
-          child: Form(
-            key: _formKey,
+          padding: const EdgeInsets.all(28.0),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
             child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text('Create Account', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white)),
+                const Icon(Icons.account_balance_wallet_rounded, size: 68, color: Colors.tealAccent),
+                const SizedBox(height: 16),
+                const Text(
+                  'FinBlend',
+                  style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  _isLogin ? 'Sign in to sync your personal & business finances' : 'Create your FinBlend account',
+                  style: const TextStyle(color: Colors.grey, fontSize: 13),
+                  textAlign: TextAlign.center,
+                ),
                 const SizedBox(height: 32),
-                TextFormField(controller: _nameController, style: const TextStyle(color: Colors.white), decoration: InputDecoration(labelText: 'Full Name', prefixIcon: const Icon(Icons.person_outline, color: Colors.tealAccent), filled: true, fillColor: const Color(0xFF1E1E1E), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)), validator: (val) => (val == null || val.trim().isEmpty) ? 'Enter your full name' : null),
+                if (!_isLogin) ...[
+                  TextField(
+                    controller: _nameCtrl,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'Full Name',
+                      hintStyle: const TextStyle(color: Colors.grey),
+                      prefixIcon: const Icon(Icons.person_outline, color: Colors.tealAccent),
+                      filled: true,
+                      fillColor: const Color(0xFF1E1E1E),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                ],
+                TextField(
+                  controller: _emailCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: 'Email Address',
+                    hintStyle: const TextStyle(color: Colors.grey),
+                    prefixIcon: const Icon(Icons.email_outlined, color: Colors.tealAccent),
+                    filled: true,
+                    fillColor: const Color(0xFF1E1E1E),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: _passCtrl,
+                  obscureText: true,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: 'Password',
+                    hintStyle: const TextStyle(color: Colors.grey),
+                    prefixIcon: const Icon(Icons.lock_outline, color: Colors.tealAccent),
+                    filled: true,
+                    fillColor: const Color(0xFF1E1E1E),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.tealAccent,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                  onPressed: _submit,
+                  child: Text(_isLogin ? 'Sign In' : 'Create Account', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                ),
                 const SizedBox(height: 16),
-                TextFormField(controller: _emailController, style: const TextStyle(color: Colors.white), keyboardType: TextInputType.emailAddress, decoration: InputDecoration(labelText: 'Email Address', prefixIcon: const Icon(Icons.email_outlined, color: Colors.tealAccent), filled: true, fillColor: const Color(0xFF1E1E1E), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)), validator: (val) => (val == null || val.trim().isEmpty) ? 'Enter your email' : null),
-                const SizedBox(height: 16),
-                TextFormField(controller: _passwordController, style: const TextStyle(color: Colors.white), obscureText: _obscurePassword, decoration: InputDecoration(labelText: 'Password', prefixIcon: const Icon(Icons.lock_outline, color: Colors.tealAccent), suffixIcon: IconButton(icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility, color: Colors.grey), onPressed: () => setState(() => _obscurePassword = !_obscurePassword)), filled: true, fillColor: const Color(0xFF1E1E1E), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)), validator: (val) => (val == null || val.isEmpty) ? 'Enter a password' : null),
-                const SizedBox(height: 16),
-                TextFormField(controller: _confirmPasswordController, style: const TextStyle(color: Colors.white), obscureText: _obscurePassword, decoration: InputDecoration(labelText: 'Confirm Password', prefixIcon: const Icon(Icons.lock_reset, color: Colors.tealAccent), filled: true, fillColor: const Color(0xFF1E1E1E), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)), validator: (val) => (val != _passwordController.text) ? 'Passwords do not match' : null),
-                const SizedBox(height: 28),
-                ElevatedButton(onPressed: _isLoading ? null : _handleRegister, style: ElevatedButton.styleFrom(backgroundColor: Colors.tealAccent, foregroundColor: Colors.black, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), child: _isLoading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator()) : const Text('Sign Up', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
+                TextButton(
+                  onPressed: () => setState(() => _isLogin = !_isLogin),
+                  child: Text(
+                    _isLogin ? "Don't have an account? Sign Up" : 'Already have an account? Sign In',
+                    style: const TextStyle(color: Colors.tealAccent),
+                  ),
+                ),
               ],
             ),
           ),

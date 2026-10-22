@@ -9,6 +9,7 @@ import 'budgets_screen.dart';
 import 'groups_screen.dart';
 import 'categories_screen.dart';
 import 'wallets_screen.dart';
+import 'export_screen.dart';
 import 'providers/transaction_provider.dart';
 
 class MainNavigationScreen extends StatefulWidget {
@@ -56,6 +57,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final txProvider = context.watch<TransactionProvider>();
+    final alerts = txProvider.activeAlerts;
+
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
@@ -63,46 +67,42 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         elevation: 0,
         title: const Text('FinBlend', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2)),
         actions: [
-          // LIVE NOTIFICATION BELL WITH COUNTER BADGE
-          Builder(
-            builder: (ctx) {
-              final alerts = ctx.watch<TransactionProvider>().activeAlerts;
-              return Stack(
-                alignment: Alignment.center,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.notifications_none_rounded, color: Colors.white),
-                    onPressed: () => ProfileScreen.showNotificationsSheet(context),
-                  ),
-                  if (alerts.isNotEmpty)
-                    Positioned(
-                      right: 8,
-                      top: 10,
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle),
-                        child: Text(
-                          '${alerts.length}',
-                          style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
-                        ),
-                      ),
+          // 1. LIVE NOTIFICATION BELL WITH BADGE
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              IconButton(
+                tooltip: 'Notifications & Alerts',
+                icon: const Icon(Icons.notifications_none_rounded, color: Colors.white),
+                onPressed: () => ProfileScreen.showNotificationsSheet(context),
+              ),
+              if (alerts.isNotEmpty)
+                Positioned(
+                  right: 8,
+                  top: 10,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle),
+                    child: Text(
+                      '${alerts.length}',
+                      style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
                     ),
-                ],
-              );
-            },
+                  ),
+                ),
+            ],
           ),
-          // THEME QUICK-TOGGLE BUTTON
+
+          // 2. INSTANT DARK / LIGHT MODE TOGGLE
           IconButton(
             tooltip: 'Switch Dark / Light Mode',
             icon: Icon(
-              context.watch<TransactionProvider>().isDarkMode ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+              txProvider.isDarkMode ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
               color: Colors.tealAccent,
             ),
-            onPressed: () {
-              final provider = context.read<TransactionProvider>();
-              provider.toggleDarkMode(!provider.isDarkMode);
-            },
+            onPressed: () => txProvider.toggleDarkMode(!txProvider.isDarkMode),
           ),
+
+          // 3. PROFILE AVATAR
           Padding(
             padding: const EdgeInsets.only(right: 16.0, left: 4.0),
             child: GestureDetector(
@@ -146,6 +146,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 class ProfileScreen extends StatefulWidget {
   final String userName;
   final String userEmail;
+
+  const ProfileScreen({super.key, required this.userName, required this.userEmail});
+
   static void showNotificationsSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -176,12 +179,20 @@ class ProfileScreen extends StatefulWidget {
                 if (!provider.notificationsEnabled)
                   const Padding(
                     padding: EdgeInsets.all(24.0),
-                    child: Text('Notifications are currently turned OFF. Switch them on above to receive budget, group, and stock alerts.', style: TextStyle(color: Colors.grey), textAlign: TextAlign.center),
+                    child: Text(
+                      'Notifications are currently muted. Turn them ON above to receive budget, group, and stock alerts.',
+                      style: TextStyle(color: Colors.grey),
+                      textAlign: TextAlign.center,
+                    ),
                   )
                 else if (alerts.isEmpty)
                   const Padding(
                     padding: EdgeInsets.all(24.0),
-                    child: Text('🎉 All caught up! No budget overruns, low stock, or pending bills.', style: TextStyle(color: Colors.tealAccent), textAlign: TextAlign.center),
+                    child: Text(
+                      '🎉 All caught up! No budget overruns, low stock, or pending bills.',
+                      style: TextStyle(color: Colors.tealAccent),
+                      textAlign: TextAlign.center,
+                    ),
                   )
                 else
                   ConstrainedBox(
@@ -233,7 +244,7 @@ class ProfileScreen extends StatefulWidget {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         backgroundColor: Colors.teal,
-                        content: Text('🔔 FinBlend Live Alert: Notifications & permissions are working properly!'),
+                        content: Text('🔔 FinBlend Live Alert: Notifications & permissions are active!'),
                       ),
                     );
                   },
@@ -247,7 +258,6 @@ class ProfileScreen extends StatefulWidget {
       ),
     );
   }
-  const ProfileScreen({super.key, required this.userName, required this.userEmail});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -256,7 +266,6 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   late String _name;
   late String _email;
-  bool _notificationsEnabled = true;
 
   @override
   void initState() {
@@ -371,8 +380,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ]),
           const SizedBox(height: 24),
 
-          // 3. PREFERENCES GROUP
-          _buildSectionHeader('Preferences'),
           // 3. PREFERENCES GROUP (DARK/LIGHT, NOTIFICATIONS & PERMISSIONS)
           _buildSectionHeader('Preferences'),
           _buildSettingsGroup([
@@ -397,7 +404,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ]),
           const SizedBox(height: 24),
 
-          // 4. TOOLS & DATA GROUP
+          // 4. TOOLS & DATA GROUP (WITH PDF, PNG & JPG EXPORT)
           _buildSectionHeader('Tools & Data'),
           _buildSettingsGroup([
             _buildSettingsTile(
@@ -412,14 +419,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             _buildSettingsTile(
               Icons.import_export,
-              'Export Data',
-              onTap: () => _showInfoDialog(
+              'Export Data (PDF, PNG, JPG)',
+              trailingText: 'Export',
+              onTap: () => Navigator.push(
                 context,
-                'Financial Summary Export',
-                'Total Personal Balance: ৳ ${txProvider.totalBalance.toStringAsFixed(0)}\n'
-                    'Total Wallets Balance: ৳ ${txProvider.totalWalletsBalance.toStringAsFixed(0)}\n'
-                    'Recorded Transactions: ${txProvider.transactions.length}\n'
-                    'Business Net Profit: ৳ ${txProvider.netProfit.toStringAsFixed(0)}',
+                MaterialPageRoute(builder: (_) => ExportScreen(userName: _name, userEmail: _email)),
               ),
             ),
           ]),
@@ -441,7 +445,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _buildSettingsTile(
               Icons.description_outlined,
               'Terms and Policies',
-              onTap: () => _showInfoDialog(context, 'Terms & Privacy', 'All financial records are stored locally on your phone for maximum privacy.'),
+              onTap: () => _showInfoDialog(context, 'Terms & Privacy', 'All financial records are stored locally and synced securely.'),
             ),
           ]),
           const SizedBox(height: 40),
@@ -477,46 +481,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _showEditProfileSheet(BuildContext context) {
-    final nameCtrl = TextEditingController(text: _name);
-    final emailCtrl = TextEditingController(text: _email);
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFF161616),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom + 24, left: 24, right: 24, top: 28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text('Edit Profile', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-            const SizedBox(height: 16),
-            TextField(controller: nameCtrl, style: const TextStyle(color: Colors.white), decoration: InputDecoration(hintText: 'Full Name', filled: true, fillColor: const Color(0xFF1E1E1E), border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none))),
-            const SizedBox(height: 12),
-            TextField(controller: emailCtrl, style: const TextStyle(color: Colors.white), decoration: InputDecoration(hintText: 'Email Address', filled: true, fillColor: const Color(0xFF1E1E1E), border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none))),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.tealAccent, foregroundColor: Colors.black, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-              onPressed: () async {
-                final prefs = await SharedPreferences.getInstance();
-                await prefs.setString('user_name', nameCtrl.text.trim());
-                await prefs.setString('user_email', emailCtrl.text.trim());
-                setState(() {
-                  _name = nameCtrl.text.trim();
-                  _email = emailCtrl.text.trim();
-                });
-                if (ctx.mounted) Navigator.pop(ctx);
-              },
-              child: const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
   void _showAppearanceSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -530,24 +494,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               const Text('Select Appearance', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
               const SizedBox(height: 16),
-              RadioListTile<bool>(
-                activeColor: Colors.tealAccent,
+              ListTile(
+                leading: Icon(
+                  provider.isDarkMode ? Icons.radio_button_checked : Icons.radio_button_off,
+                  color: Colors.tealAccent,
+                ),
                 title: const Text('Premium Dark Mode (OLED)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 subtitle: const Text('Deep contrast dark theme', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                value: true,
-                groupValue: provider.isDarkMode,
-                onChanged: (v) {
+                onTap: () {
                   provider.toggleDarkMode(true);
                   Navigator.pop(ctx);
                 },
               ),
-              RadioListTile<bool>(
-                activeColor: Colors.tealAccent,
+              ListTile(
+                leading: Icon(
+                  !provider.isDarkMode ? Icons.radio_button_checked : Icons.radio_button_off,
+                  color: Colors.tealAccent,
+                ),
                 title: const Text('Daylight Mode (Light)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 subtitle: const Text('High-visibility light theme', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                value: false,
-                groupValue: provider.isDarkMode,
-                onChanged: (v) {
+                onTap: () {
                   provider.toggleDarkMode(false);
                   Navigator.pop(ctx);
                 },
@@ -610,6 +576,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
+
+  void _showEditProfileSheet(BuildContext context) {
+    final nameCtrl = TextEditingController(text: _name);
+    final emailCtrl = TextEditingController(text: _email);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF161616),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom + 24, left: 24, right: 24, top: 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text('Edit Profile', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            TextField(controller: nameCtrl, style: const TextStyle(color: Colors.white), decoration: InputDecoration(hintText: 'Full Name', filled: true, fillColor: const Color(0xFF1E1E1E), border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none))),
+            const SizedBox(height: 12),
+            TextField(controller: emailCtrl, style: const TextStyle(color: Colors.white), decoration: InputDecoration(hintText: 'Email Address', filled: true, fillColor: const Color(0xFF1E1E1E), border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none))),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.tealAccent, foregroundColor: Colors.black, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+              onPressed: () async {
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setString('user_name', nameCtrl.text.trim());
+                await prefs.setString('user_email', emailCtrl.text.trim());
+                setState(() {
+                  _name = nameCtrl.text.trim();
+                  _email = emailCtrl.text.trim();
+                });
+                if (ctx.mounted) Navigator.pop(ctx);
+              },
+              child: const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showInfoDialog(BuildContext context, String title, String message) {
     showDialog(
       context: context,
