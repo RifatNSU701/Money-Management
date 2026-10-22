@@ -58,7 +58,7 @@ class TransactionModel {
 class GroupMemberModel {
   final String id;
   final String name;
-  final double paidAmount; // How much this member has given so far
+  final double paidAmount;
 
   GroupMemberModel({
     required this.id,
@@ -83,8 +83,8 @@ class GroupExpenseModel {
   final String id;
   final String title;
   final double amount;
-  final String paidByMemberId; // 'pool' or member.id
-  final String paidByMemberName; // 'Group Pool' or member.name
+  final String paidByMemberId;
+  final String paidByMemberName;
   final String date;
 
   GroupExpenseModel({
@@ -133,26 +133,12 @@ class GroupModel {
   });
 
   int get memberCount => members.length;
-
-  // Target each member should give based on total budget (e.g., 50,000 / 5 = 10,000)
   double get targetPerMember => memberCount > 0 ? (totalBudget / memberCount) : 0.0;
-
-  // Total money given by all members combined
   double get totalCollected => members.fold(0.0, (sum, m) => sum + m.paidAmount);
-
-  // Total still owed by members toward the target budget
   double get totalOwedToBudget => (totalBudget - totalCollected) > 0 ? (totalBudget - totalCollected) : 0.0;
-
-  // Total money spent from the budget so far
   double get totalSpent => expenses.fold(0.0, (sum, e) => sum + e.amount);
-
-  // How much each member has spent (equal split of total group expenses)
   double get spentPerMember => memberCount > 0 ? (totalSpent / memberCount) : 0.0;
-
-  // Cash left in hand from what was collected (Total Given - Total Spent)
   double get poolBalanceLeft => totalCollected - totalSpent;
-
-  // Total budget remaining (Total Budget - Total Spent)
   double get budgetRemaining => totalBudget - totalSpent;
 
   Map<String, dynamic> toJson() => {
@@ -328,7 +314,7 @@ class BusinessTxModel {
 }
 
 // =============================================================================
-// UNIFIED PROVIDER
+// UNIFIED PROVIDER (PERSONAL + BUSINESS + THEME + ALERTS)
 // =============================================================================
 class TransactionProvider with ChangeNotifier {
   // Personal State
@@ -337,7 +323,7 @@ class TransactionProvider with ChangeNotifier {
   List<String> _expenseCategories = ['Food & Dining', 'Transportation', 'Shopping', 'Entertainment'];
   List<String> _incomeCategories = ['Salary', 'Freelance / Projects', 'Investments', 'Gifts'];
   List<GroupModel> _groups = [];
-  List<String> _savedMembers = ['Rifat', 'Rahim', 'Karim', 'Sakib', 'Tanvir']; // Global reusable member directory
+  List<String> _savedMembers = ['Rifat', 'Rahim', 'Karim', 'Sakib', 'Tanvir'];
 
   List<WalletModel> _wallets = [
     WalletModel(id: 'w1', name: 'Physical Cash', type: 'Cash', providerName: 'Cash', balance: 5000),
@@ -350,6 +336,11 @@ class TransactionProvider with ChangeNotifier {
   List<ProductModel> _products = [];
   List<PartyModel> _parties = [];
   List<BusinessTxModel> _businessTxs = [];
+
+  // Appearance, Notifications & Permissions State
+  bool _isDarkMode = true;
+  bool _notificationsEnabled = true;
+  bool _permissionsGranted = true;
 
   TransactionProvider() {
     _loadData();
@@ -364,6 +355,10 @@ class TransactionProvider with ChangeNotifier {
   List<String> get savedMembers => _savedMembers;
   List<WalletModel> get wallets => _wallets;
   List<ScheduledTxModel> get scheduledTxs => _scheduledTxs;
+
+  bool get isDarkMode => _isDarkMode;
+  bool get notificationsEnabled => _notificationsEnabled;
+  bool get permissionsGranted => _permissionsGranted;
 
   double get totalIncome => _transactions.where((tx) => !tx.isExpense).fold(0, (sum, tx) => sum + tx.amount);
   double get totalExpense => _transactions.where((tx) => tx.isExpense).fold(0, (sum, tx) => sum + tx.amount);
@@ -408,6 +403,10 @@ class TransactionProvider with ChangeNotifier {
       if (prefs.containsKey('biz_prod_data')) _products = (jsonDecode(prefs.getString('biz_prod_data')!) as List).map((i) => ProductModel.fromJson(i)).toList();
       if (prefs.containsKey('biz_party_data')) _parties = (jsonDecode(prefs.getString('biz_party_data')!) as List).map((i) => PartyModel.fromJson(i)).toList();
       if (prefs.containsKey('biz_tx_data')) _businessTxs = (jsonDecode(prefs.getString('biz_tx_data')!) as List).map((i) => BusinessTxModel.fromJson(i)).toList();
+
+      if (prefs.containsKey('pref_dark_mode')) _isDarkMode = prefs.getBool('pref_dark_mode') ?? true;
+      if (prefs.containsKey('pref_notif')) _notificationsEnabled = prefs.getBool('pref_notif') ?? true;
+      if (prefs.containsKey('pref_perm')) _permissionsGranted = prefs.getBool('pref_perm') ?? true;
     } catch (e) {
       debugPrint("Data load error: $e");
     }
@@ -428,6 +427,10 @@ class TransactionProvider with ChangeNotifier {
     await prefs.setString('biz_prod_data', jsonEncode(_products.map((p) => p.toJson()).toList()));
     await prefs.setString('biz_party_data', jsonEncode(_parties.map((p) => p.toJson()).toList()));
     await prefs.setString('biz_tx_data', jsonEncode(_businessTxs.map((t) => t.toJson()).toList()));
+
+    await prefs.setBool('pref_dark_mode', _isDarkMode);
+    await prefs.setBool('pref_notif', _notificationsEnabled);
+    await prefs.setBool('pref_perm', _permissionsGranted);
   }
 
   // --- SAVED MEMBERS DIRECTORY CRUD ---
@@ -523,16 +526,13 @@ class TransactionProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // ===========================================================================
-  // ADVANCED GROUP & TRIP SPLIT CRUD
-  // ===========================================================================
+  // --- ADVANCED GROUP & TRIP SPLIT CRUD ---
   void saveGroupPlan({
     String? id,
     required String name,
     required double totalBudget,
     List<GroupMemberModel>? updatedMembers,
   }) {
-    // Also register any new member names into the Saved Members directory
     if (updatedMembers != null) {
       for (var m in updatedMembers) {
         if (m.name.trim().isNotEmpty && !_savedMembers.any((s) => s.toLowerCase() == m.name.trim().toLowerCase())) {
@@ -850,5 +850,72 @@ class TransactionProvider with ChangeNotifier {
     _parties.removeWhere((p) => p.id == id);
     _saveData();
     notifyListeners();
+  }
+
+  // --- APPEARANCE, NOTIFICATIONS & PERMISSIONS ---
+  void toggleDarkMode(bool isDark) {
+    _isDarkMode = isDark;
+    _saveData();
+    notifyListeners();
+  }
+
+  void toggleNotifications(bool enabled) {
+    _notificationsEnabled = enabled;
+    _saveData();
+    notifyListeners();
+  }
+
+  void updatePermissions(bool granted) {
+    _permissionsGranted = granted;
+    _saveData();
+    notifyListeners();
+  }
+
+  List<Map<String, dynamic>> get activeAlerts {
+    if (!_notificationsEnabled) return [];
+    final List<Map<String, dynamic>> alerts = [];
+
+    Map<String, double> spentByCat = {};
+    for (var tx in _transactions.where((t) => t.isExpense)) {
+      spentByCat[tx.title] = (spentByCat[tx.title] ?? 0) + tx.amount;
+    }
+    _budgets.forEach((cat, limit) {
+      final spent = spentByCat[cat] ?? 0;
+      if (limit > 0 && spent >= limit * 0.85) {
+        alerts.add({
+          'title': spent >= limit ? 'Budget Exceeded: $cat' : 'Budget Warning: $cat',
+          'body': 'Spent ৳${spent.toStringAsFixed(0)} of ৳${limit.toStringAsFixed(0)} (${((spent / limit) * 100).toStringAsFixed(0)}%)',
+          'color': 0xFFFF5252,
+        });
+      }
+    });
+
+    for (var g in _groups) {
+      if (g.totalOwedToBudget > 0) {
+        alerts.add({
+          'title': 'Group Collection Pending: ${g.name}',
+          'body': 'Members still owe ৳${g.totalOwedToBudget.toStringAsFixed(0)} toward the ৳${g.totalBudget.toStringAsFixed(0)} budget.',
+          'color': 0xFFFFAB40,
+        });
+      }
+    }
+
+    for (var s in _scheduledTxs) {
+      alerts.add({
+        'title': 'Scheduled Bill Reminder: ${s.title}',
+        'body': '৳${s.amount.toStringAsFixed(0)} due on ${s.dueDate}',
+        'color': 0xFF64FFDA,
+      });
+    }
+
+    for (var p in _products.where((p) => p.stock <= 5)) {
+      alerts.add({
+        'title': 'Low Stock Alert: ${p.name}',
+        'body': 'Only ${p.stock} units remaining in Business Inventory.',
+        'color': 0xFFFF5252,
+      });
+    }
+
+    return alerts;
   }
 }

@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/transaction_provider.dart';
@@ -22,14 +23,15 @@ class GroupsScreen extends StatelessWidget {
     }
     final double allGroupsBudgetRemaining = allGroupsBudget - allGroupsSpent;
     final double allGroupsPoolLeft = allGroupsCollected - allGroupsSpent;
-    final double allGroupsStillOwed = (allGroupsBudget - allGroupsCollected) > 0 ? (allGroupsBudget - allGroupsCollected) : 0;
+    final double allGroupsStillOwed =
+    (allGroupsBudget - allGroupsCollected) > 0 ? (allGroupsBudget - allGroupsCollected) : 0;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: ListView(
         padding: const EdgeInsets.all(20.0),
         children: [
-          // 1. MASTER SUMMARY CARD (BUDGET, GIVEN, OWED, SPENT, REMAINING)
+          // 1. MASTER EXECUTIVE SUMMARY CARD
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -40,7 +42,11 @@ class GroupsScreen extends StatelessWidget {
               ),
               borderRadius: BorderRadius.circular(28),
               boxShadow: [
-                BoxShadow(color: Colors.tealAccent.withValues(alpha: 0.12), blurRadius: 18, offset: const Offset(0, 8)),
+                BoxShadow(
+                  color: Colors.tealAccent.withValues(alpha: 0.12),
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
+                ),
               ],
             ),
             child: Column(
@@ -49,11 +55,17 @@ class GroupsScreen extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Master Group & Trip Overview', style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
+                    const Text(
+                      'Master Group & Trip Overview',
+                      style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(12)),
-                      child: Text('${groups.length} Active Plans', style: const TextStyle(color: Colors.tealAccent, fontSize: 11, fontWeight: FontWeight.bold)),
+                      child: Text(
+                        '${groups.length} Active Plans',
+                        style: const TextStyle(color: Colors.tealAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                      ),
                     ),
                   ],
                 ),
@@ -97,7 +109,7 @@ class GroupsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 24),
 
-          // 2. DEDICATED SAVED MEMBERS DIRECTORY (ADD / MANAGE MEMBERS MANUALLY)
+          // 2. SAVED MEMBERS DIRECTORY
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -111,12 +123,20 @@ class GroupsScreen extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.people_alt_rounded, color: Colors.tealAccent, size: 20),
-                        SizedBox(width: 8),
-                        Text('Saved Members Directory', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
-                      ],
+                    const Expanded(
+                      child: Row(
+                        children: [
+                          Icon(Icons.people_alt_rounded, color: Colors.tealAccent, size: 20),
+                          SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              'Saved Members Directory',
+                              style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
@@ -162,7 +182,10 @@ class GroupsScreen extends StatelessWidget {
                               CircleAvatar(
                                 radius: 10,
                                 backgroundColor: Colors.tealAccent.withValues(alpha: 0.2),
-                                child: Text(memberName[0].toUpperCase(), style: const TextStyle(color: Colors.tealAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+                                child: Text(
+                                  memberName[0].toUpperCase(),
+                                  style: const TextStyle(color: Colors.tealAccent, fontSize: 10, fontWeight: FontWeight.bold),
+                                ),
                               ),
                               const SizedBox(width: 6),
                               Text(memberName, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
@@ -179,7 +202,7 @@ class GroupsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 24),
 
-          // 3. TRIPS & SHARED BUDGET PLANS HEADER
+          // 3. TRIPS & SHARED BUDGET PLANS
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -233,9 +256,9 @@ class GroupsScreen extends StatelessWidget {
   Widget _buildStatCol(String label, String amount, Color color) {
     return Column(
       children: [
-        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11), overflow: TextOverflow.ellipsis),
         const SizedBox(height: 4),
-        Text(amount, style: TextStyle(color: color, fontSize: 15, fontWeight: FontWeight.bold)),
+        Text(amount, style: TextStyle(color: color, fontSize: 15, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
       ],
     );
   }
@@ -244,6 +267,8 @@ class GroupsScreen extends StatelessWidget {
     final double progress = group.totalBudget > 0 ? (group.totalSpent / group.totalBudget).clamp(0.0, 1.0) : 0.0;
     final double targetPerPerson = group.targetPerMember;
     final double spentPerPerson = group.spentPerMember;
+    final bool isOverBudget = group.totalSpent > group.totalBudget;
+    final bool isNearlyFull = !isOverBudget && progress >= 0.85;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 18),
@@ -251,7 +276,10 @@ class GroupsScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF1E1E1E),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white12),
+        border: Border.all(
+          color: isOverBudget ? Colors.redAccent.withValues(alpha: 0.5) : Colors.white12,
+          width: isOverBudget ? 1.5 : 1.0,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -260,7 +288,10 @@ class GroupsScreen extends StatelessWidget {
             children: [
               Container(
                 padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: Colors.tealAccent.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(14)),
+                decoration: BoxDecoration(
+                  color: Colors.tealAccent.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(14),
+                ),
                 child: const Icon(Icons.flight_takeoff_rounded, color: Colors.tealAccent, size: 24),
               ),
               const SizedBox(width: 12),
@@ -290,15 +321,78 @@ class GroupsScreen extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                isOverBudget
+                    ? '⚠️ Budget Exceeded by ৳ ${(group.totalSpent - group.totalBudget).toStringAsFixed(0)}'
+                    : 'Budget Used: ${(progress * 100).toStringAsFixed(0)}%',
+                style: TextStyle(
+                  color: isOverBudget ? Colors.redAccent : (isNearlyFull ? Colors.amberAccent : Colors.white70),
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                'Available to Spend: ৳ ${math.max<double>(0, group.budgetRemaining).toStringAsFixed(0)}',
+                style: const TextStyle(color: Colors.greenAccent, fontSize: 11, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: LinearProgressIndicator(
               value: progress,
               minHeight: 8,
               backgroundColor: Colors.white10,
-              valueColor: AlwaysStoppedAnimation<Color>(group.totalSpent > group.totalBudget ? Colors.redAccent : Colors.tealAccent),
+              valueColor: AlwaysStoppedAnimation<Color>(
+                isOverBudget ? Colors.redAccent : (isNearlyFull ? Colors.amberAccent : Colors.tealAccent),
+              ),
             ),
           ),
+          if (isOverBudget) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.redAccent.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 18),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Spent exceeds Plan Budget. Sync budget to match spending?',
+                      style: TextStyle(color: Colors.white, fontSize: 11),
+                    ),
+                  ),
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      backgroundColor: Colors.redAccent,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: () {
+                      context.read<TransactionProvider>().saveGroupPlan(
+                        id: group.id,
+                        name: group.name,
+                        totalBudget: group.totalSpent,
+                        updatedMembers: group.members,
+                      );
+                    },
+                    child: Text('Sync ৳${group.totalSpent.toStringAsFixed(0)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
           Container(
             padding: const EdgeInsets.all(12),
@@ -308,9 +402,9 @@ class GroupsScreen extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    _buildMiniMetric('Plan Budget', '৳ ${group.totalBudget.toStringAsFixed(0)}', Colors.white),
-                    _buildMiniMetric('Total Given', '৳ ${group.totalCollected.toStringAsFixed(0)}', Colors.tealAccent),
-                    _buildMiniMetric('Still Owed', '৳ ${group.totalOwedToBudget.toStringAsFixed(0)}', Colors.amberAccent),
+                    Expanded(child: _buildMiniMetric('Plan Budget', '৳ ${group.totalBudget.toStringAsFixed(0)}', Colors.white)),
+                    Expanded(child: _buildMiniMetric('Total Given', '৳ ${group.totalCollected.toStringAsFixed(0)}', Colors.tealAccent)),
+                    Expanded(child: _buildMiniMetric('Still Owed', '৳ ${group.totalOwedToBudget.toStringAsFixed(0)}', Colors.amberAccent)),
                   ],
                 ),
                 const Padding(
@@ -320,16 +414,20 @@ class GroupsScreen extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    _buildMiniMetric('Total Spent', '৳ ${group.totalSpent.toStringAsFixed(0)}', Colors.orangeAccent),
-                    _buildMiniMetric(
-                      'Budget Remaining',
-                      '৳ ${group.budgetRemaining.toStringAsFixed(0)}',
-                      group.budgetRemaining >= 0 ? Colors.greenAccent : Colors.redAccent,
+                    Expanded(child: _buildMiniMetric('Total Spent', '৳ ${group.totalSpent.toStringAsFixed(0)}', Colors.orangeAccent)),
+                    Expanded(
+                      child: _buildMiniMetric(
+                        'Budget Remaining',
+                        '৳ ${math.max<double>(0, group.budgetRemaining).toStringAsFixed(0)}',
+                        group.budgetRemaining >= 0 ? Colors.greenAccent : Colors.redAccent,
+                      ),
                     ),
-                    _buildMiniMetric(
-                      'Cash Left in Pool',
-                      '৳ ${group.poolBalanceLeft.toStringAsFixed(0)}',
-                      group.poolBalanceLeft >= 0 ? Colors.tealAccent : Colors.redAccent,
+                    Expanded(
+                      child: _buildMiniMetric(
+                        'Cash Left in Pool',
+                        '৳ ${group.poolBalanceLeft.toStringAsFixed(0)}',
+                        group.poolBalanceLeft >= 0 ? Colors.tealAccent : Colors.redAccent,
+                      ),
                     ),
                   ],
                 ),
@@ -338,10 +436,26 @@ class GroupsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Members (Tap person to edit Given ৳):', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
-              Text('Spent/Person: ৳ ${spentPerPerson.toStringAsFixed(0)}', style: const TextStyle(color: Colors.orangeAccent, fontSize: 11, fontWeight: FontWeight.w600)),
+              const Expanded(
+                child: Text(
+                  'Members (Tap to update Given ৳):',
+                  style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.orangeAccent.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'Spent/Person: ৳ ${spentPerPerson.toStringAsFixed(0)}',
+                  style: const TextStyle(color: Colors.orangeAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -377,7 +491,10 @@ class GroupsScreen extends StatelessWidget {
                         CircleAvatar(
                           radius: 14,
                           backgroundColor: Colors.tealAccent.withValues(alpha: 0.15),
-                          child: Text(m.name.isNotEmpty ? m.name[0].toUpperCase() : '?', style: const TextStyle(color: Colors.tealAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                          child: Text(
+                            m.name.isNotEmpty ? m.name[0].toUpperCase() : '?',
+                            style: const TextStyle(color: Colors.tealAccent, fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
@@ -386,7 +503,11 @@ class GroupsScreen extends StatelessWidget {
                             children: [
                               Text(m.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
                               Text(
-                                owedToTarget > 0 ? 'Owes to Budget: ৳ ${owedToTarget.toStringAsFixed(0)}' : 'Target Met ✓',
+                                owedToTarget > 0
+                                    ? 'Owes to Budget: ৳ ${owedToTarget.toStringAsFixed(0)}'
+                                    : (m.paidAmount > targetPerPerson
+                                    ? 'Target Met (+৳ ${(m.paidAmount - targetPerPerson).toStringAsFixed(0)} extra)'
+                                    : 'Target Met ✓'),
                                 style: TextStyle(color: owedToTarget > 0 ? Colors.amberAccent : Colors.greenAccent, fontSize: 11),
                               ),
                             ],
@@ -399,7 +520,7 @@ class GroupsScreen extends StatelessWidget {
                             Text(
                               netLeftFromPaid >= 0
                                   ? 'Left/Gets back: +৳ ${netLeftFromPaid.toStringAsFixed(0)}'
-                                  : 'Due vs Spent: -৳ ${netLeftFromPaid.abs().toStringAsFixed(0)}',
+                                  : 'Short vs Spent: -৳ ${netLeftFromPaid.abs().toStringAsFixed(0)}',
                               style: TextStyle(color: netLeftFromPaid >= 0 ? Colors.greenAccent : Colors.redAccent, fontSize: 10, fontWeight: FontWeight.w600),
                             ),
                           ],
@@ -416,18 +537,27 @@ class GroupsScreen extends StatelessWidget {
             const SizedBox(height: 8),
             const Text('How Budget Was Spent:', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
             const SizedBox(height: 6),
-            ...group.expenses.take(3).map((e) => Padding(
-              padding: const EdgeInsets.only(bottom: 4.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text('• ${e.title} (by ${e.paidByMemberName})', style: const TextStyle(color: Colors.grey, fontSize: 12), overflow: TextOverflow.ellipsis),
-                  ),
-                  Text('- ৳ ${e.amount.toStringAsFixed(0)}', style: const TextStyle(color: Colors.orangeAccent, fontSize: 12, fontWeight: FontWeight.bold)),
-                ],
+            ...group.expenses.take(3).map(
+                  (e) => Padding(
+                padding: const EdgeInsets.only(bottom: 4.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '• ${e.title} (by ${e.paidByMemberName})',
+                        style: const TextStyle(color: Colors.grey, fontSize: 12),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Text(
+                      '- ৳ ${e.amount.toStringAsFixed(0)}',
+                      style: const TextStyle(color: Colors.orangeAccent, fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
               ),
-            )),
+            ),
           ],
           const SizedBox(height: 14),
           Row(
@@ -441,22 +571,25 @@ class GroupsScreen extends StatelessWidget {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   onPressed: () => _showAddOrSelectMembersForPlanSheet(context, group),
-                  icon: const Icon(Icons.person_add_alt_1, size: 16),
-                  label: const Text('+ Member', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  icon: const Icon(Icons.person_add_alt_1, size: 15),
+                  label: const Text('+ Member', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.orangeAccent,
-                    side: const BorderSide(color: Colors.orangeAccent),
+                    foregroundColor: group.budgetRemaining <= 0 ? Colors.grey : Colors.orangeAccent,
+                    side: BorderSide(color: group.budgetRemaining <= 0 ? Colors.white24 : Colors.orangeAccent),
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   onPressed: () => GroupDetailScreen.showExpenseSheet(context, group),
-                  icon: const Icon(Icons.add_shopping_cart, size: 16),
-                  label: const Text('+ Spend', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  icon: const Icon(Icons.add_shopping_cart, size: 15),
+                  label: Text(
+                    group.budgetRemaining <= 0 ? 'Budget Full' : '+ Spend',
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -474,8 +607,8 @@ class GroupsScreen extends StatelessWidget {
                       MaterialPageRoute(builder: (_) => GroupDetailScreen(groupId: group.id)),
                     );
                   },
-                  icon: const Icon(Icons.open_in_new, size: 15),
-                  label: const Text('Full Ledger', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  icon: const Icon(Icons.open_in_new, size: 14),
+                  label: const Text('Full Ledger', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -489,9 +622,9 @@ class GroupsScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: const TextStyle(color: Colors.grey, fontSize: 10)),
+        Text(title, style: const TextStyle(color: Colors.grey, fontSize: 10), overflow: TextOverflow.ellipsis),
         const SizedBox(height: 2),
-        Text(val, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13)),
+        Text(val, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis),
       ],
     );
   }
@@ -504,7 +637,10 @@ class GroupsScreen extends StatelessWidget {
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1E1E1E),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(existingName == null ? 'Add Member to Directory' : 'Edit Saved Member', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+        title: Text(
+          existingName == null ? 'Add Member to Directory' : 'Edit Saved Member',
+          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+        ),
         content: TextField(
           controller: ctrl,
           autofocus: true,
@@ -569,9 +705,16 @@ class GroupsScreen extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text('Add / Select Members for "${latestGroup.name}"', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+                  Text(
+                    'Add / Select Members for "${latestGroup.name}"',
+                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                  ),
                   const SizedBox(height: 16),
-                  const Text('Tap to Select / Remove from Saved Members:', style: TextStyle(color: Colors.tealAccent, fontSize: 13, fontWeight: FontWeight.bold)),
+                  const Text(
+                    'Tap to Select / Remove from Saved Members:',
+                    style: TextStyle(color: Colors.tealAccent, fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
@@ -581,7 +724,10 @@ class GroupsScreen extends StatelessWidget {
                       final isSelected = existingMemberIndex != -1;
 
                       return FilterChip(
-                        label: Text(savedName, style: TextStyle(color: isSelected ? Colors.black : Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                        label: Text(
+                          savedName,
+                          style: TextStyle(color: isSelected ? Colors.black : Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
                         selected: isSelected,
                         selectedColor: Colors.tealAccent,
                         backgroundColor: const Color(0xFF222222),
@@ -599,7 +745,10 @@ class GroupsScreen extends StatelessWidget {
                   const SizedBox(height: 18),
                   const Divider(color: Colors.white12),
                   const SizedBox(height: 12),
-                  const Text('Or Add New Member Manually + Amount Given:', style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold)),
+                  const Text(
+                    'Or Add New Member Manually + Amount Given:',
+                    style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 10),
                   Row(
                     children: [
@@ -693,6 +842,7 @@ class GroupsScreen extends StatelessWidget {
           final savedDirectory = context.watch<TransactionProvider>().savedMembers;
           final double currentBudget = double.tryParse(budgetCtrl.text.trim()) ?? 0;
           final double targetPerPerson = tempMembers.isNotEmpty ? (currentBudget / tempMembers.length) : 0;
+          final double minRequiredBudget = existing?.totalSpent ?? 0.0;
 
           return Padding(
             padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom + 24, left: 24, right: 24, top: 24),
@@ -726,7 +876,7 @@ class GroupsScreen extends StatelessWidget {
                     onChanged: (_) => setSheetState(() {}),
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                     decoration: InputDecoration(
-                      hintText: 'Total Plan Budget (e.g., 25000)',
+                      hintText: 'Total Plan Budget (e.g., 50000)',
                       hintStyle: const TextStyle(color: Colors.grey),
                       prefixIcon: const Icon(Icons.account_balance_wallet_outlined, color: Colors.tealAccent),
                       filled: true,
@@ -734,6 +884,14 @@ class GroupsScreen extends StatelessWidget {
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
                     ),
                   ),
+                  if (existing != null && currentBudget < minRequiredBudget)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6.0),
+                      child: Text(
+                        'Note: This plan already spent ৳ ${minRequiredBudget.toStringAsFixed(0)}. Budget will be set to at least ৳ ${minRequiredBudget.toStringAsFixed(0)}.',
+                        style: const TextStyle(color: Colors.amberAccent, fontSize: 11),
+                      ),
+                    ),
                   const SizedBox(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -865,8 +1023,9 @@ class GroupsScreen extends StatelessWidget {
                     ),
                     onPressed: () {
                       final name = nameCtrl.text.trim();
-                      final budget = double.tryParse(budgetCtrl.text.trim()) ?? 0.0;
+                      double budget = double.tryParse(budgetCtrl.text.trim()) ?? 0.0;
                       if (name.isEmpty) return;
+                      if (budget < minRequiredBudget) budget = minRequiredBudget;
 
                       if (manualMemberNameCtrl.text.trim().isNotEmpty) {
                         tempMembers.add(
@@ -899,7 +1058,7 @@ class GroupsScreen extends StatelessWidget {
 }
 
 // =============================================================================
-// DETAILED GROUP / TRIP LEDGER SCREEN (FULL BREAKDOWN)
+// DETAILED GROUP / TRIP LEDGER SCREEN (WITH SMART SETTLEMENT ENGINE)
 // =============================================================================
 class GroupDetailScreen extends StatelessWidget {
   final String groupId;
@@ -921,7 +1080,7 @@ class GroupDetailScreen extends StatelessWidget {
     final group = provider.groups[groupIndex];
 
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         backgroundColor: const Color(0xFF121212),
         appBar: AppBar(
@@ -938,9 +1097,11 @@ class GroupDetailScreen extends StatelessWidget {
             indicatorColor: Colors.tealAccent,
             labelColor: Colors.tealAccent,
             unselectedLabelColor: Colors.grey,
+            labelStyle: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
             tabs: [
-              Tab(icon: Icon(Icons.people_alt_outlined), text: 'Members (Given & Owed)'),
-              Tab(icon: Icon(Icons.receipt_long_outlined), text: 'How Budget is Spent'),
+              Tab(icon: Icon(Icons.people_alt_outlined, size: 20), text: 'Members'),
+              Tab(icon: Icon(Icons.receipt_long_outlined, size: 20), text: 'Spending'),
+              Tab(icon: Icon(Icons.handshake_outlined, size: 20), text: 'Settle Up'),
             ],
           ),
         ),
@@ -959,9 +1120,9 @@ class GroupDetailScreen extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _buildTopStat('Total Budget', '৳ ${group.totalBudget.toStringAsFixed(0)}', Colors.white),
-                      _buildTopStat('Target / Person', '৳ ${group.targetPerMember.toStringAsFixed(0)}', Colors.tealAccent),
-                      _buildTopStat('Total Given', '৳ ${group.totalCollected.toStringAsFixed(0)}', Colors.greenAccent),
+                      Expanded(child: _buildTopStat('Total Budget', '৳ ${group.totalBudget.toStringAsFixed(0)}', Colors.white)),
+                      Expanded(child: _buildTopStat('Target / Person', '৳ ${group.targetPerMember.toStringAsFixed(0)}', Colors.tealAccent)),
+                      Expanded(child: _buildTopStat('Total Given', '৳ ${group.totalCollected.toStringAsFixed(0)}', Colors.greenAccent)),
                     ],
                   ),
                   const Padding(
@@ -971,16 +1132,20 @@ class GroupDetailScreen extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _buildTopStat('Total Spent', '৳ ${group.totalSpent.toStringAsFixed(0)}', Colors.orangeAccent),
-                      _buildTopStat(
-                        'Budget Remaining',
-                        '৳ ${group.budgetRemaining.toStringAsFixed(0)}',
-                        group.budgetRemaining >= 0 ? Colors.greenAccent : Colors.redAccent,
+                      Expanded(child: _buildTopStat('Total Spent', '৳ ${group.totalSpent.toStringAsFixed(0)}', Colors.orangeAccent)),
+                      Expanded(
+                        child: _buildTopStat(
+                          'Budget Remaining',
+                          '৳ ${math.max<double>(0, group.budgetRemaining).toStringAsFixed(0)}',
+                          group.budgetRemaining >= 0 ? Colors.greenAccent : Colors.redAccent,
+                        ),
                       ),
-                      _buildTopStat(
-                        'Cash Pool Left',
-                        '৳ ${group.poolBalanceLeft.toStringAsFixed(0)}',
-                        group.poolBalanceLeft >= 0 ? Colors.tealAccent : Colors.redAccent,
+                      Expanded(
+                        child: _buildTopStat(
+                          'Cash Pool Left',
+                          '৳ ${group.poolBalanceLeft.toStringAsFixed(0)}',
+                          group.poolBalanceLeft >= 0 ? Colors.tealAccent : Colors.redAccent,
+                        ),
                       ),
                     ],
                   ),
@@ -992,6 +1157,7 @@ class GroupDetailScreen extends StatelessWidget {
                 children: [
                   _buildMembersTab(context, group),
                   _buildExpensesTab(context, group),
+                  _buildSettlementTab(context, group),
                 ],
               ),
             ),
@@ -1005,9 +1171,9 @@ class GroupDetailScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11), overflow: TextOverflow.ellipsis),
         const SizedBox(height: 4),
-        Text(value, style: TextStyle(color: color, fontSize: 15, fontWeight: FontWeight.bold)),
+        Text(value, style: TextStyle(color: color, fontSize: 15, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
       ],
     );
   }
@@ -1036,10 +1202,10 @@ class GroupDetailScreen extends StatelessWidget {
           String settlementText;
           Color settlementColor;
           if (individualLeftFromPaid > 0.5) {
-            settlementText = 'Gets back / Has left from Given: +৳ ${individualLeftFromPaid.toStringAsFixed(0)}';
+            settlementText = 'Gets back / Unused from Given: +৳ ${individualLeftFromPaid.toStringAsFixed(0)}';
             settlementColor = Colors.greenAccent;
           } else if (individualLeftFromPaid < -0.5) {
-            settlementText = 'Owes for Expenses (Spent > Given): -৳ ${individualLeftFromPaid.abs().toStringAsFixed(0)}';
+            settlementText = 'Short vs Spent Share: -৳ ${individualLeftFromPaid.abs().toStringAsFixed(0)}';
             settlementColor = Colors.redAccent;
           } else {
             settlementText = 'Settled up with current spending';
@@ -1061,7 +1227,10 @@ class GroupDetailScreen extends StatelessWidget {
                   children: [
                     CircleAvatar(
                       backgroundColor: Colors.tealAccent.withValues(alpha: 0.15),
-                      child: Text(m.name.isNotEmpty ? m.name[0].toUpperCase() : '?', style: const TextStyle(color: Colors.tealAccent, fontWeight: FontWeight.bold)),
+                      child: Text(
+                        m.name.isNotEmpty ? m.name[0].toUpperCase() : '?',
+                        style: const TextStyle(color: Colors.tealAccent, fontWeight: FontWeight.bold),
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -1072,7 +1241,7 @@ class GroupDetailScreen extends StatelessWidget {
                           const SizedBox(height: 2),
                           Text(
                             dueToTarget > 0
-                                ? 'Owes to Budget Target: ৳ ${dueToTarget.toStringAsFixed(0)} (of ৳ ${targetPerPerson.toStringAsFixed(0)})'
+                                ? 'Owes to Target: ৳ ${dueToTarget.toStringAsFixed(0)} (of ৳ ${targetPerPerson.toStringAsFixed(0)})'
                                 : (dueToTarget < 0
                                 ? 'Gave ৳ ${dueToTarget.abs().toStringAsFixed(0)} extra above target'
                                 : 'Met full target share (৳ ${targetPerPerson.toStringAsFixed(0)})'),
@@ -1102,24 +1271,44 @@ class GroupDetailScreen extends StatelessWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _buildMemberCell('Given', '৳ ${m.paidAmount.toStringAsFixed(0)}', Colors.tealAccent),
-                      _buildMemberCell('Owes Target', '৳ ${(dueToTarget > 0 ? dueToTarget : 0).toStringAsFixed(0)}', Colors.amberAccent),
-                      _buildMemberCell('Spent Share', '৳ ${spentPerPerson.toStringAsFixed(0)}', Colors.orangeAccent),
-                      _buildMemberCell(
-                        'Money Left',
-                        '${individualLeftFromPaid >= 0 ? '+' : ''}৳ ${individualLeftFromPaid.toStringAsFixed(0)}',
-                        individualLeftFromPaid >= 0 ? Colors.greenAccent : Colors.redAccent,
+                      Expanded(child: _buildMemberCell('Given', '৳ ${m.paidAmount.toStringAsFixed(0)}', Colors.tealAccent)),
+                      Expanded(child: _buildMemberCell('Owes Target', '৳ ${(dueToTarget > 0 ? dueToTarget : 0).toStringAsFixed(0)}', Colors.amberAccent)),
+                      Expanded(child: _buildMemberCell('Spent Share', '৳ ${spentPerPerson.toStringAsFixed(0)}', Colors.orangeAccent)),
+                      Expanded(
+                        child: _buildMemberCell(
+                          'Money Left',
+                          '${individualLeftFromPaid >= 0 ? '+' : ''}৳ ${individualLeftFromPaid.toStringAsFixed(0)}',
+                          individualLeftFromPaid >= 0 ? Colors.greenAccent : Colors.redAccent,
+                        ),
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 10),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Expanded(
-                      child: Text(settlementText, style: TextStyle(color: settlementColor, fontSize: 12, fontWeight: FontWeight.bold)),
+                      child: Text(settlementText, style: TextStyle(color: settlementColor, fontSize: 11, fontWeight: FontWeight.bold)),
                     ),
+                    if (dueToTarget > 0) ...[
+                      TextButton(
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.amberAccent,
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          minimumSize: Size.zero,
+                        ),
+                        onPressed: () {
+                          context.read<TransactionProvider>().saveGroupMember(
+                            groupId: group.id,
+                            memberId: m.id,
+                            name: m.name,
+                            paidAmount: targetPerPerson,
+                          );
+                        },
+                        child: const Text('Pay Full Target', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      ),
+                      const SizedBox(width: 4),
+                    ],
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.tealAccent.withValues(alpha: 0.15),
@@ -1128,7 +1317,7 @@ class GroupDetailScreen extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       ),
                       onPressed: () => showSingleMemberSheet(context, group.id, existing: m, suggestedTarget: targetPerPerson),
-                      icon: const Icon(Icons.payments_outlined, size: 15),
+                      icon: const Icon(Icons.payments_outlined, size: 14),
                       label: const Text('Update Given', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                     ),
                   ],
@@ -1152,67 +1341,104 @@ class GroupDetailScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 10)),
+        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 10), overflow: TextOverflow.ellipsis),
         const SizedBox(height: 3),
-        Text(val, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13)),
+        Text(val, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis),
       ],
     );
   }
 
   Widget _buildExpensesTab(BuildContext context, GroupModel group) {
+    final double remaining = math.max<double>(0, group.budgetRemaining);
+
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: group.expenses.isEmpty
-          ? const Center(
-        child: Padding(
-          padding: EdgeInsets.all(24.0),
-          child: Text('No group expenses recorded yet. Tap "+ Spend Budget" below!', style: TextStyle(color: Colors.grey), textAlign: TextAlign.center),
-        ),
-      )
-          : ListView.builder(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 90),
-        itemCount: group.expenses.length,
-        itemBuilder: (ctx, i) {
-          final exp = group.expenses[i];
-          final perPersonCost = group.memberCount > 0 ? (exp.amount / group.memberCount) : exp.amount;
-
-          return Container(
-            margin: const EdgeInsets.only(bottom: 10),
+      body: Column(
+        children: [
+          Container(
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
-              color: const Color(0xFF1E1E1E),
-              borderRadius: BorderRadius.circular(18),
+              color: const Color(0xFF1A1A1A),
+              borderRadius: BorderRadius.circular(14),
               border: Border.all(color: Colors.white10),
             ),
-            child: ListTile(
-              onTap: () => showExpenseSheet(context, group, existing: exp),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              leading: Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: Colors.orangeAccent.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
-                child: const Icon(Icons.receipt_long, color: Colors.orangeAccent),
-              ),
-              title: Text(exp.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-              subtitle: Padding(
-                padding: const EdgeInsets.only(top: 4.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Remaining Budget Limit: ৳ ${remaining.toStringAsFixed(0)}',
+                  style: TextStyle(color: remaining > 0 ? Colors.greenAccent : Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  'Pool Cash Available: ৳ ${math.max<double>(0, group.poolBalanceLeft).toStringAsFixed(0)}',
+                  style: const TextStyle(color: Colors.tealAccent, fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: group.expenses.isEmpty
+                ? const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24.0),
                 child: Text(
-                  'Paid by: ${exp.paidByMemberName} • ৳ ${perPersonCost.toStringAsFixed(0)}/person\n${exp.date}',
-                  style: const TextStyle(color: Colors.grey, fontSize: 11),
+                  'No group expenses recorded yet. Tap "+ Spend Budget" below!',
+                  style: TextStyle(color: Colors.grey),
+                  textAlign: TextAlign.center,
                 ),
               ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('- ৳ ${exp.amount.toStringAsFixed(0)}', style: const TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold, fontSize: 15)),
-                  const SizedBox(width: 6),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
-                    onPressed: () => context.read<TransactionProvider>().deleteGroupExpense(groupId: group.id, expenseId: exp.id),
+            )
+                : ListView.builder(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 90),
+              itemCount: group.expenses.length,
+              itemBuilder: (ctx, i) {
+                final exp = group.expenses[i];
+                final perPersonCost = group.memberCount > 0 ? (exp.amount / group.memberCount) : exp.amount;
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E1E1E),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: Colors.white10),
                   ),
-                ],
-              ),
+                  child: ListTile(
+                    onTap: () => showExpenseSheet(context, group, existing: exp),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    leading: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(color: Colors.orangeAccent.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
+                      child: const Icon(Icons.receipt_long, color: Colors.orangeAccent),
+                    ),
+                    title: Text(exp.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                    subtitle: Padding(
+                      padding: const EdgeInsets.only(top: 4.0),
+                      child: Text(
+                        'Paid by: ${exp.paidByMemberName} • ৳ ${perPersonCost.toStringAsFixed(0)}/person\n${exp.date}',
+                        style: const TextStyle(color: Colors.grey, fontSize: 11),
+                      ),
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '- ৳ ${exp.amount.toStringAsFixed(0)}',
+                          style: const TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold, fontSize: 15),
+                        ),
+                        const SizedBox(width: 6),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                          onPressed: () => context.read<TransactionProvider>().deleteGroupExpense(groupId: group.id, expenseId: exp.id),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
             ),
-          );
-        },
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: Colors.orangeAccent,
@@ -1224,85 +1450,324 @@ class GroupDetailScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildSettlementTab(BuildContext context, GroupModel group) {
+    final double spentPerPerson = group.spentPerMember;
+    final double targetPerPerson = group.targetPerMember;
+
+    final List<Map<String, dynamic>> creditors = [];
+    final List<Map<String, dynamic>> debtors = [];
+
+    for (var m in group.members) {
+      final double net = m.paidAmount - spentPerPerson;
+      if (net > 0.5) {
+        creditors.add({'member': m, 'amount': net});
+      } else if (net < -0.5) {
+        debtors.add({'member': m, 'amount': net.abs()});
+      }
+    }
+
+    final List<Map<String, dynamic>> transfers = [];
+    int cIdx = 0;
+    int dIdx = 0;
+    final List<double> cAmounts = creditors.map((c) => c['amount'] as double).toList();
+    final List<double> dAmounts = debtors.map((d) => d['amount'] as double).toList();
+
+    while (cIdx < creditors.length && dIdx < debtors.length) {
+      final double pay = math.min(cAmounts[cIdx], dAmounts[dIdx]);
+      if (pay > 0.5) {
+        transfers.add({
+          'from': debtors[dIdx]['member'] as GroupMemberModel,
+          'to': creditors[cIdx]['member'] as GroupMemberModel,
+          'amount': pay,
+        });
+      }
+      cAmounts[cIdx] -= pay;
+      dAmounts[dIdx] -= pay;
+      if (cAmounts[cIdx] <= 0.5) cIdx++;
+      if (dAmounts[dIdx] <= 0.5) dIdx++;
+    }
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E1E1E),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white10),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.account_balance_wallet, color: Colors.tealAccent, size: 20),
+                  SizedBox(width: 8),
+                  Text('Step 1: Budget Collection Status', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Target Share: ৳ ${targetPerPerson.toStringAsFixed(0)} per member • Total Still Owed: ৳ ${group.totalOwedToBudget.toStringAsFixed(0)}',
+                style: const TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+              const SizedBox(height: 12),
+              ...group.members.map((m) {
+                final double shortOfTarget = targetPerPerson - m.paidAmount;
+                final bool met = shortOfTarget <= 0.5;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(m.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                      if (met)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(color: Colors.greenAccent.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
+                          child: Text(
+                            m.paidAmount > targetPerPerson + 0.5
+                                ? 'Paid +৳ ${(m.paidAmount - targetPerPerson).toStringAsFixed(0)} Extra'
+                                : 'Target Paid ✓',
+                            style: const TextStyle(color: Colors.greenAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        )
+                      else
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.amberAccent,
+                            foregroundColor: Colors.black,
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          onPressed: () {
+                            context.read<TransactionProvider>().saveGroupMember(
+                              groupId: group.id,
+                              memberId: m.id,
+                              name: m.name,
+                              paidAmount: targetPerPerson,
+                            );
+                          },
+                          child: Text('Collect ৳ ${shortOfTarget.toStringAsFixed(0)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                        ),
+                    ],
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E1E1E),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white10),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.published_with_changes_rounded, color: Colors.orangeAccent, size: 20),
+                  SizedBox(width: 8),
+                  Text('Step 2: Expense Settlement & Refunds', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Actual Spent: ৳ ${group.totalSpent.toStringAsFixed(0)} (৳ ${spentPerPerson.toStringAsFixed(0)} / member)',
+                style: const TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+              const SizedBox(height: 12),
+              if (group.poolBalanceLeft > 0.5)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: Colors.tealAccent.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+                  child: Text(
+                    '💡 Cash Pool currently holds ৳ ${group.poolBalanceLeft.toStringAsFixed(0)} in unspent money that can be refunded to members who overpaid.',
+                    style: const TextStyle(color: Colors.tealAccent, fontSize: 12),
+                  ),
+                ),
+              if (transfers.isEmpty && group.poolBalanceLeft.abs() <= 0.5)
+                const Text('All members are 100% settled up against actual expenses!', style: TextStyle(color: Colors.greenAccent, fontSize: 13, fontWeight: FontWeight.bold))
+              else
+                ...transfers.map((t) {
+                  final from = t['from'] as GroupMemberModel;
+                  final to = t['to'] as GroupMemberModel;
+                  final amt = t['amount'] as double;
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(color: const Color(0xFF141414), borderRadius: BorderRadius.circular(12)),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${from.name}  ➔  pays ৳ ${amt.toStringAsFixed(0)}  ➔  ${to.name}',
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            context.read<TransactionProvider>().saveGroupMember(
+                              groupId: group.id,
+                              memberId: from.id,
+                              name: from.name,
+                              paidAmount: from.paidAmount + amt,
+                            );
+                          },
+                          child: const Text('Mark Paid', style: TextStyle(color: Colors.tealAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   static void showSingleMemberSheet(BuildContext context, String groupId, {GroupMemberModel? existing, required double suggestedTarget}) {
     final nameCtrl = TextEditingController(text: existing?.name ?? '');
-    final paidCtrl = TextEditingController(text: existing != null ? existing.paidAmount.toStringAsFixed(0) : '');
+    final amountCtrl = TextEditingController();
+    bool isInstallmentMode = existing != null && existing.paidAmount > 0;
+
+    if (!isInstallmentMode && existing != null) {
+      amountCtrl.text = existing.paidAmount.toStringAsFixed(0);
+    }
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: const Color(0xFF161616),
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom + 24, left: 24, right: 24, top: 28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              existing == null ? 'Add Member & Money Given' : 'Update ${existing.name}\'s Contribution',
-              style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold),
-              textAlign: TextAlign.center,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final double currentPaid = existing?.paidAmount ?? 0.0;
+          final double remainingToTarget = math.max<double>(0, suggestedTarget - currentPaid);
+
+          return Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom + 24, left: 24, right: 24, top: 28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  existing == null ? 'Add Member & Money Given' : 'Update ${existing.name}\'s Contribution',
+                  style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: nameCtrl,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: 'Member Name (e.g., Rifat)',
+                    hintStyle: const TextStyle(color: Colors.grey),
+                    prefixIcon: const Icon(Icons.person_outline, color: Colors.tealAccent),
+                    filled: true,
+                    fillColor: const Color(0xFF1E1E1E),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                  ),
+                ),
+                if (existing != null) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      ChoiceChip(
+                        label: Text('+ Add Installment (Current: ৳${currentPaid.toStringAsFixed(0)})', style: TextStyle(color: isInstallmentMode ? Colors.black : Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                        selected: isInstallmentMode,
+                        selectedColor: Colors.tealAccent,
+                        backgroundColor: const Color(0xFF1E1E1E),
+                        showCheckmark: false,
+                        onSelected: (_) => setSheetState(() {
+                          isInstallmentMode = true;
+                          amountCtrl.clear();
+                        }),
+                      ),
+                      const SizedBox(width: 8),
+                      ChoiceChip(
+                        label: Text('Set Total Given', style: TextStyle(color: !isInstallmentMode ? Colors.black : Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                        selected: !isInstallmentMode,
+                        selectedColor: Colors.tealAccent,
+                        backgroundColor: const Color(0xFF1E1E1E),
+                        showCheckmark: false,
+                        onSelected: (_) => setSheetState(() {
+                          isInstallmentMode = false;
+                          amountCtrl.text = currentPaid.toStringAsFixed(0);
+                        }),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 12),
+                TextField(
+                  controller: amountCtrl,
+                  keyboardType: TextInputType.number,
+                  autofocus: existing != null,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  decoration: InputDecoration(
+                    hintText: isInstallmentMode ? 'Add Amount Given Today (৳)' : 'Total Amount Given (৳)',
+                    hintStyle: const TextStyle(color: Colors.grey),
+                    prefixIcon: const Icon(Icons.payments_outlined, color: Colors.tealAccent),
+                    suffixIcon: suggestedTarget > 0
+                        ? TextButton(
+                      onPressed: () {
+                        if (isInstallmentMode && remainingToTarget > 0) {
+                          amountCtrl.text = remainingToTarget.toStringAsFixed(0);
+                        } else {
+                          amountCtrl.text = suggestedTarget.toStringAsFixed(0);
+                        }
+                      },
+                      child: Text(
+                        isInstallmentMode && remainingToTarget > 0
+                            ? '+Rest ৳${remainingToTarget.toStringAsFixed(0)}'
+                            : 'Target ৳${suggestedTarget.toStringAsFixed(0)}',
+                        style: const TextStyle(color: Colors.tealAccent, fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    )
+                        : null,
+                    filled: true,
+                    fillColor: const Color(0xFF1E1E1E),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.tealAccent,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                  onPressed: () {
+                    final name = nameCtrl.text.trim();
+                    final entered = double.tryParse(amountCtrl.text.trim()) ?? 0.0;
+                    final finalPaid = isInstallmentMode ? (currentPaid + entered) : entered;
+                    if (name.isNotEmpty) {
+                      context.read<TransactionProvider>().saveGroupMember(
+                        groupId: groupId,
+                        memberId: existing?.id,
+                        name: name,
+                        paidAmount: finalPaid,
+                      );
+                      Navigator.pop(ctx);
+                    }
+                  },
+                  child: Text(existing == null ? 'Save Member' : 'Save Contribution', style: const TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
             ),
-            const SizedBox(height: 18),
-            TextField(
-              controller: nameCtrl,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: 'Member Name (e.g., Rifat)',
-                hintStyle: const TextStyle(color: Colors.grey),
-                prefixIcon: const Icon(Icons.person_outline, color: Colors.tealAccent),
-                filled: true,
-                fillColor: const Color(0xFF1E1E1E),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: paidCtrl,
-              keyboardType: TextInputType.number,
-              autofocus: existing != null,
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-              decoration: InputDecoration(
-                hintText: 'Total Amount Given (৳)',
-                hintStyle: const TextStyle(color: Colors.grey),
-                prefixIcon: const Icon(Icons.payments_outlined, color: Colors.tealAccent),
-                suffixIcon: suggestedTarget > 0
-                    ? TextButton(
-                  onPressed: () => paidCtrl.text = suggestedTarget.toStringAsFixed(0),
-                  child: Text('Full ৳${suggestedTarget.toStringAsFixed(0)}', style: const TextStyle(color: Colors.tealAccent, fontSize: 12)),
-                )
-                    : null,
-                filled: true,
-                fillColor: const Color(0xFF1E1E1E),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-              ),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.tealAccent,
-                foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              ),
-              onPressed: () {
-                final name = nameCtrl.text.trim();
-                final paid = double.tryParse(paidCtrl.text.trim()) ?? 0.0;
-                if (name.isNotEmpty) {
-                  context.read<TransactionProvider>().saveGroupMember(
-                    groupId: groupId,
-                    memberId: existing?.id,
-                    name: name,
-                    paidAmount: paid,
-                  );
-                  Navigator.pop(ctx);
-                }
-              },
-              child: Text(existing == null ? 'Save Member' : 'Save Given Amount', style: const TextStyle(fontWeight: FontWeight.bold)),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -1312,7 +1777,16 @@ class GroupDetailScreen extends StatelessWidget {
     final amountCtrl = TextEditingController(text: existing != null ? existing.amount.toStringAsFixed(0) : '');
     String selectedPayerId = existing?.paidByMemberId ?? 'pool';
     String selectedPayerName = existing?.paidByMemberName ?? 'Group Pool';
+    String selectedCategory = 'General';
     bool creditMember = true;
+
+    const List<String> quickCategories = ['General', 'Food', 'Transport', 'Hotel/Venue', 'Legal/Docs', 'Tickets'];
+
+    final double maxAvailableBudget = math.max<double>(0, group.budgetRemaining + (existing?.amount ?? 0.0));
+    final double maxAvailablePoolCash = math.max<double>(
+      0,
+      group.poolBalanceLeft + (existing != null && existing.paidByMemberId == 'pool' ? existing.amount : 0.0),
+    );
 
     showModalBottomSheet(
       context: context,
@@ -1320,122 +1794,267 @@ class GroupDetailScreen extends StatelessWidget {
       backgroundColor: const Color(0xFF161616),
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
       builder: (ctx) => StatefulBuilder(
-        builder: (context, setSheetState) => Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom + 24, left: 24, right: 24, top: 28),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  existing == null ? 'Spend from "${group.name}" Budget' : 'Edit Expense',
-                  style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 18),
-                TextField(
-                  controller: titleCtrl,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    hintText: 'What was bought? (e.g., Hotel, Food, Bus)',
-                    hintStyle: const TextStyle(color: Colors.grey),
-                    prefixIcon: const Icon(Icons.receipt_outlined, color: Colors.orangeAccent),
-                    filled: true,
-                    fillColor: const Color(0xFF1E1E1E),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+        builder: (context, setSheetState) {
+          final double enteredAmount = double.tryParse(amountCtrl.text.trim()) ?? 0.0;
+          final bool exceedsBudget = enteredAmount > maxAvailableBudget;
+          final bool exceedsPoolCash = selectedPayerId == 'pool' && enteredAmount > maxAvailablePoolCash;
+          final double budgetShortage = enteredAmount - maxAvailableBudget;
+
+          return Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom + 24, left: 24, right: 24, top: 24),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    existing == null ? 'Spend from "${group.name}" Budget' : 'Edit Expense',
+                    style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
                   ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: amountCtrl,
-                  keyboardType: TextInputType.number,
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                  decoration: InputDecoration(
-                    hintText: 'Amount Spent (৳)',
-                    hintStyle: const TextStyle(color: Colors.grey),
-                    prefixIcon: const Icon(Icons.attach_money, color: Colors.orangeAccent),
-                    filled: true,
-                    fillColor: const Color(0xFF1E1E1E),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text('Who Paid for This Expense?', style: TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    ChoiceChip(
-                      label: const Text('Collected Group Pool'),
-                      selected: selectedPayerId == 'pool',
-                      selectedColor: Colors.tealAccent,
-                      labelStyle: TextStyle(color: selectedPayerId == 'pool' ? Colors.black : Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
-                      backgroundColor: const Color(0xFF1E1E1E),
-                      showCheckmark: false,
-                      onSelected: (_) => setSheetState(() {
-                        selectedPayerId = 'pool';
-                        selectedPayerName = 'Group Pool';
-                      }),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: exceedsBudget ? Colors.redAccent.withValues(alpha: 0.15) : const Color(0xFF1E1E1E),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: exceedsBudget ? Colors.redAccent : Colors.tealAccent.withValues(alpha: 0.3)),
                     ),
-                    ...group.members.map((m) {
-                      final isSel = selectedPayerId == m.id;
-                      return ChoiceChip(
-                        label: Text(m.name),
-                        selected: isSel,
-                        selectedColor: Colors.orangeAccent,
-                        labelStyle: TextStyle(color: isSel ? Colors.black : Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Available Plan Budget', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                            Text(
+                              '৳ ${maxAvailableBudget.toStringAsFixed(0)}',
+                              style: TextStyle(color: exceedsBudget ? Colors.redAccent : Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 16),
+                            ),
+                          ],
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            const Text('Collected Cash in Pool', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                            Text(
+                              '৳ ${maxAvailablePoolCash.toStringAsFixed(0)}',
+                              style: TextStyle(color: exceedsPoolCash ? Colors.amberAccent : Colors.tealAccent, fontWeight: FontWeight.bold, fontSize: 16),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: quickCategories.map((cat) {
+                        final isSel = selectedCategory == cat;
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 6.0),
+                          child: ChoiceChip(
+                            label: Text(cat, style: TextStyle(color: isSel ? Colors.black : Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
+                            selected: isSel,
+                            selectedColor: Colors.orangeAccent,
+                            backgroundColor: const Color(0xFF1E1E1E),
+                            showCheckmark: false,
+                            onSelected: (_) => setSheetState(() => selectedCategory = cat),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: titleCtrl,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'Expense Title (e.g., Legal, Domain, Hotel)',
+                      hintStyle: const TextStyle(color: Colors.grey),
+                      prefixIcon: const Icon(Icons.receipt_outlined, color: Colors.orangeAccent),
+                      filled: true,
+                      fillColor: const Color(0xFF1E1E1E),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: amountCtrl,
+                    keyboardType: TextInputType.number,
+                    onChanged: (_) => setSheetState(() {}),
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    decoration: InputDecoration(
+                      hintText: 'Amount Spent (Max: ৳ ${maxAvailableBudget.toStringAsFixed(0)})',
+                      hintStyle: const TextStyle(color: Colors.grey),
+                      prefixIcon: const Icon(Icons.attach_money, color: Colors.orangeAccent),
+                      suffixIcon: maxAvailableBudget > 0
+                          ? TextButton(
+                        onPressed: () => setSheetState(() => amountCtrl.text = maxAvailableBudget.toStringAsFixed(0)),
+                        child: const Text('Max', style: TextStyle(color: Colors.orangeAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                      )
+                          : null,
+                      filled: true,
+                      fillColor: const Color(0xFF1E1E1E),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                    ),
+                  ),
+                  if (exceedsBudget) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.redAccent),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '⛔ Cannot spend ৳ ${enteredAmount.toStringAsFixed(0)}! It exceeds your remaining budget (৳ ${maxAvailableBudget.toStringAsFixed(0)}) by ৳ ${budgetShortage.toStringAsFixed(0)}.',
+                            style: const TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.tealAccent,
+                                side: const BorderSide(color: Colors.tealAccent),
+                              ),
+                              onPressed: () {
+                                final rawTitle = titleCtrl.text.trim().isEmpty ? selectedCategory : titleCtrl.text.trim();
+                                final finalTitle = selectedCategory != 'General' && !rawTitle.contains('[') ? '[$selectedCategory] $rawTitle' : rawTitle;
+                                final newTotalBudget = group.totalBudget + budgetShortage;
+
+                                context.read<TransactionProvider>().saveGroupPlan(
+                                  id: group.id,
+                                  name: group.name,
+                                  totalBudget: newTotalBudget,
+                                  updatedMembers: group.members,
+                                );
+                                context.read<TransactionProvider>().saveGroupExpense(
+                                  groupId: group.id,
+                                  expenseId: existing?.id,
+                                  title: finalTitle,
+                                  amount: enteredAmount,
+                                  paidByMemberId: selectedPayerId,
+                                  paidByMemberName: selectedPayerName,
+                                  creditMemberPaidAmount: creditMember,
+                                );
+                                Navigator.pop(ctx);
+                              },
+                              icon: const Icon(Icons.trending_up, size: 16),
+                              label: Text(
+                                'Increase Plan Budget to ৳ ${(group.totalBudget + budgetShortage).toStringAsFixed(0)} & Spend',
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ] else if (exceedsPoolCash) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.amberAccent.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.amberAccent),
+                      ),
+                      child: Text(
+                        '⚠️ The Collected Group Pool only has ৳ ${maxAvailablePoolCash.toStringAsFixed(0)} in cash right now. Either select the specific Member who paid below, or record more member contributions first.',
+                        style: const TextStyle(color: Colors.amberAccent, fontSize: 11, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 14),
+                  const Text('Who Paid for This Expense?', style: TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ChoiceChip(
+                        label: Text('Collected Pool (৳${maxAvailablePoolCash.toStringAsFixed(0)})'),
+                        selected: selectedPayerId == 'pool',
+                        selectedColor: Colors.tealAccent,
+                        labelStyle: TextStyle(color: selectedPayerId == 'pool' ? Colors.black : Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
                         backgroundColor: const Color(0xFF1E1E1E),
                         showCheckmark: false,
                         onSelected: (_) => setSheetState(() {
-                          selectedPayerId = m.id;
-                          selectedPayerName = m.name;
+                          selectedPayerId = 'pool';
+                          selectedPayerName = 'Group Pool';
                         }),
-                      );
-                    }),
+                      ),
+                      ...group.members.map((m) {
+                        final isSel = selectedPayerId == m.id;
+                        return ChoiceChip(
+                          label: Text(m.name),
+                          selected: isSel,
+                          selectedColor: Colors.orangeAccent,
+                          labelStyle: TextStyle(color: isSel ? Colors.black : Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                          backgroundColor: const Color(0xFF1E1E1E),
+                          showCheckmark: false,
+                          onSelected: (_) => setSheetState(() {
+                            selectedPayerId = m.id;
+                            selectedPayerName = m.name;
+                          }),
+                        );
+                      }),
+                    ],
+                  ),
+                  if (existing == null && selectedPayerId != 'pool') ...[
+                    const SizedBox(height: 8),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      activeThumbColor: Colors.tealAccent,
+                      title: Text('Add this ৳ to $selectedPayerName\'s Given total?', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                      subtitle: const Text('Keep ON if they paid out of their own pocket', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                      value: creditMember,
+                      onChanged: (v) => setSheetState(() => creditMember = v),
+                    ),
                   ],
-                ),
-                if (existing == null && selectedPayerId != 'pool') ...[
-                  const SizedBox(height: 8),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    activeThumbColor: Colors.tealAccent,
-                    title: Text('Add this ৳ to $selectedPayerName\'s Given total?', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                    subtitle: const Text('Keep ON if they paid out of their own pocket', style: TextStyle(color: Colors.grey, fontSize: 11)),
-                    value: creditMember,
-                    onChanged: (v) => setSheetState(() => creditMember = v),
-                  ),
-                ],
-                const SizedBox(height: 20),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orangeAccent,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  ),
-                  onPressed: () {
-                    final title = titleCtrl.text.trim();
-                    final amt = double.tryParse(amountCtrl.text.trim()) ?? 0.0;
-                    if (title.isNotEmpty && amt > 0) {
+                  const SizedBox(height: 18),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: (exceedsBudget || exceedsPoolCash || enteredAmount <= 0) ? Colors.white12 : Colors.orangeAccent,
+                      foregroundColor: (exceedsBudget || exceedsPoolCash || enteredAmount <= 0) ? Colors.white38 : Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                    onPressed: (exceedsBudget || exceedsPoolCash || enteredAmount <= 0)
+                        ? null
+                        : () {
+                      final rawTitle = titleCtrl.text.trim().isEmpty ? selectedCategory : titleCtrl.text.trim();
+                      final finalTitle = selectedCategory != 'General' && !rawTitle.contains('[') ? '[$selectedCategory] $rawTitle' : rawTitle;
+
                       context.read<TransactionProvider>().saveGroupExpense(
                         groupId: group.id,
                         expenseId: existing?.id,
-                        title: title,
-                        amount: amt,
+                        title: finalTitle,
+                        amount: enteredAmount,
                         paidByMemberId: selectedPayerId,
                         paidByMemberName: selectedPayerName,
                         creditMemberPaidAmount: creditMember,
                       );
                       Navigator.pop(ctx);
-                    }
-                  },
-                  child: Text(existing == null ? 'Save Expense' : 'Update Expense', style: const TextStyle(fontWeight: FontWeight.bold)),
-                ),
-              ],
+                    },
+                    child: Text(
+                      exceedsBudget
+                          ? 'Exceeds Remaining Budget'
+                          : (exceedsPoolCash ? 'Insufficient Pool Cash (Select Member Payer)' : (existing == null ? 'Save Expense' : 'Update Expense')),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }

@@ -76,20 +76,34 @@ class FinanceApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = context.watch<TransactionProvider>().isDarkMode;
+
+    // Hue-preserving luminance inversion matrix for crisp Light Mode across all custom cards
+    const List<double> lightModeMatrix = <double>[
+      0.402, -1.174, -0.228, 0, 255,
+      -0.598, -0.174, -0.228, 0, 255,
+      -0.598, -1.174,  0.772, 0, 255,
+      0,      0,      0,     1,   0,
+    ];
+
     return MaterialApp(
       title: 'FinBlend',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark().copyWith(
         scaffoldBackgroundColor: const Color(0xFF121212),
-        primaryColor: Colors.tealAccent,
         colorScheme: const ColorScheme.dark(
           primary: Colors.tealAccent,
           secondary: Colors.teal,
-          surface: Color(0xFF1E1E1E),
         ),
-        cardColor: const Color(0xFF1E1E1E),
       ),
-      home: startLoggedIn ? const MainNavigationScreen() : const LoginScreen(),
+      builder: (context, child) {
+        if (isDark) return child!;
+        return ColorFiltered(
+          colorFilter: const ColorFilter.matrix(lightModeMatrix),
+          child: child,
+        );
+      },
+      home: const LoginScreen(), // Keep your existing home widget name here (e.g., AuthGate or LoginScreen)
     );
   }
 }

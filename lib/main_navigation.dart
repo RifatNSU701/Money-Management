@@ -63,8 +63,48 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         elevation: 0,
         title: const Text('FinBlend', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2)),
         actions: [
+          // LIVE NOTIFICATION BELL WITH COUNTER BADGE
+          Builder(
+            builder: (ctx) {
+              final alerts = ctx.watch<TransactionProvider>().activeAlerts;
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.notifications_none_rounded, color: Colors.white),
+                    onPressed: () => ProfileScreen.showNotificationsSheet(context),
+                  ),
+                  if (alerts.isNotEmpty)
+                    Positioned(
+                      right: 8,
+                      top: 10,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle),
+                        child: Text(
+                          '${alerts.length}',
+                          style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+          // THEME QUICK-TOGGLE BUTTON
+          IconButton(
+            tooltip: 'Switch Dark / Light Mode',
+            icon: Icon(
+              context.watch<TransactionProvider>().isDarkMode ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+              color: Colors.tealAccent,
+            ),
+            onPressed: () {
+              final provider = context.read<TransactionProvider>();
+              provider.toggleDarkMode(!provider.isDarkMode);
+            },
+          ),
           Padding(
-            padding: const EdgeInsets.only(right: 16.0),
+            padding: const EdgeInsets.only(right: 16.0, left: 4.0),
             child: GestureDetector(
               onTap: () async {
                 await Navigator.push(
@@ -106,7 +146,107 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 class ProfileScreen extends StatefulWidget {
   final String userName;
   final String userEmail;
-
+  static void showNotificationsSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF161616),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+      builder: (ctx) => Consumer<TransactionProvider>(
+        builder: (context, provider, _) {
+          final alerts = provider.activeAlerts;
+          return Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Notification Center', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                    Switch(
+                      activeThumbColor: Colors.tealAccent,
+                      value: provider.notificationsEnabled,
+                      onChanged: (v) => provider.toggleNotifications(v),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (!provider.notificationsEnabled)
+                  const Padding(
+                    padding: EdgeInsets.all(24.0),
+                    child: Text('Notifications are currently turned OFF. Switch them on above to receive budget, group, and stock alerts.', style: TextStyle(color: Colors.grey), textAlign: TextAlign.center),
+                  )
+                else if (alerts.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(24.0),
+                    child: Text('🎉 All caught up! No budget overruns, low stock, or pending bills.', style: TextStyle(color: Colors.tealAccent), textAlign: TextAlign.center),
+                  )
+                else
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 320),
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: alerts.length,
+                      itemBuilder: (c, i) {
+                        final a = alerts[i];
+                        final color = Color(a['color'] as int);
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E1E1E),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: color.withValues(alpha: 0.4)),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.notifications_active, color: color),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(a['title'], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                                    const SizedBox(height: 3),
+                                    Text(a['body'], style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                const SizedBox(height: 12),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.tealAccent,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        backgroundColor: Colors.teal,
+                        content: Text('🔔 FinBlend Live Alert: Notifications & permissions are working properly!'),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.send_rounded, size: 18),
+                  label: const Text('Send Test Notification', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
   const ProfileScreen({super.key, required this.userName, required this.userEmail});
 
   @override
@@ -233,24 +373,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           // 3. PREFERENCES GROUP
           _buildSectionHeader('Preferences'),
+          // 3. PREFERENCES GROUP (DARK/LIGHT, NOTIFICATIONS & PERMISSIONS)
+          _buildSectionHeader('Preferences'),
           _buildSettingsGroup([
             _buildSettingsTile(
               Icons.palette_outlined,
               'Appearance',
-              trailingText: 'Premium Dark',
-              onTap: () => _showInfoDialog(context, 'Appearance', 'FinBlend uses an OLED-optimized Dark Theme by default.'),
+              trailingText: txProvider.isDarkMode ? 'Dark Mode' : 'Light Mode',
+              onTap: () => _showAppearanceSheet(context),
             ),
             _buildSettingsTile(
-              Icons.notifications_none,
-              'Notifications',
-              trailingText: _notificationsEnabled ? 'On' : 'Off',
-              onTap: () => setState(() => _notificationsEnabled = !_notificationsEnabled),
+              Icons.notifications_active_outlined,
+              'Notifications & Alerts',
+              trailingText: txProvider.notificationsEnabled ? '${txProvider.activeAlerts.length} Active' : 'Muted',
+              onTap: () => ProfileScreen.showNotificationsSheet(context),
             ),
             _buildSettingsTile(
-              Icons.security,
-              'Security',
-              trailingText: 'Active',
-              onTap: () => _showInfoDialog(context, 'Security', 'Your session and local financial database are protected on this device.'),
+              Icons.admin_panel_settings_outlined,
+              'Permissions & Security',
+              trailingText: txProvider.permissionsGranted ? 'All Granted' : 'Restricted',
+              onTap: () => _showPermissionsSheet(context),
             ),
           ]),
           const SizedBox(height: 24),
@@ -375,7 +517,99 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
+  void _showAppearanceSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF161616),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+      builder: (ctx) => Consumer<TransactionProvider>(
+        builder: (context, provider, _) => Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Select Appearance', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              RadioListTile<bool>(
+                activeColor: Colors.tealAccent,
+                title: const Text('Premium Dark Mode (OLED)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                subtitle: const Text('Deep contrast dark theme', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                value: true,
+                groupValue: provider.isDarkMode,
+                onChanged: (v) {
+                  provider.toggleDarkMode(true);
+                  Navigator.pop(ctx);
+                },
+              ),
+              RadioListTile<bool>(
+                activeColor: Colors.tealAccent,
+                title: const Text('Daylight Mode (Light)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                subtitle: const Text('High-visibility light theme', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                value: false,
+                groupValue: provider.isDarkMode,
+                onChanged: (v) {
+                  provider.toggleDarkMode(false);
+                  Navigator.pop(ctx);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
+  void _showPermissionsSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF161616),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+      builder: (ctx) => Consumer<TransactionProvider>(
+        builder: (context, provider, _) => Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('App Permissions & Security', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              SwitchListTile(
+                activeThumbColor: Colors.tealAccent,
+                secondary: const Icon(Icons.notifications_outlined, color: Colors.tealAccent),
+                title: const Text('Push & Local Notifications', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                subtitle: const Text('Allow budget, bill, and stock alerts', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                value: provider.notificationsEnabled,
+                onChanged: (v) => provider.toggleNotifications(v),
+              ),
+              SwitchListTile(
+                activeThumbColor: Colors.tealAccent,
+                secondary: const Icon(Icons.folder_open_outlined, color: Colors.tealAccent),
+                title: const Text('Storage & File Export Access', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                subtitle: const Text('Required for saving PDF, PNG, and JPG reports', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                value: provider.permissionsGranted,
+                onChanged: (v) => provider.updatePermissions(v),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.tealAccent,
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+                onPressed: () {
+                  provider.toggleNotifications(true);
+                  provider.updatePermissions(true);
+                  Navigator.pop(ctx);
+                },
+                child: const Text('Grant All & Save', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
   void _showInfoDialog(BuildContext context, String title, String message) {
     showDialog(
       context: context,
