@@ -1,10 +1,10 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:image_cropper/image_cropper.dart';
 import 'package:image/image.dart' as img;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
@@ -18,6 +18,23 @@ import 'categories_screen.dart';
 import 'wallets_screen.dart';
 import 'export_screen.dart';
 import 'providers/transaction_provider.dart';
+
+// Mathematical involution matrix: applying this a second time on photos in Light Mode
+// cancels out the global Light Mode inversion and restores 100% true photo colors.
+const List<double> kTrueColorPhotoMatrix = <double>[
+  0.402, -1.174, -0.228, 0, 255,
+  -0.598, -0.174, -0.228, 0, 255,
+  -0.598, -1.174,  0.772, 0, 255,
+  0,      0,      0,     1,   0,
+];
+
+Widget buildTrueColorWrapper({required bool isDarkMode, required Widget child}) {
+  if (isDarkMode) return child;
+  return ColorFiltered(
+    colorFilter: const ColorFilter.matrix(kTrueColorPhotoMatrix),
+    child: child,
+  );
+}
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
@@ -46,45 +63,24 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     }
   }
 
-  Widget _buildUserAvatar(String photoBase64, {double radius = 18}) {
-    Widget avatarChild;
+  Widget _buildUserAvatar(String photoBase64, bool isDarkMode, {double radius = 18}) {
     if (photoBase64.isNotEmpty) {
       try {
         final bytes = base64Decode(photoBase64);
-        avatarChild = CircleAvatar(
-          radius: radius,
-          backgroundColor: Colors.teal,
-          backgroundImage: MemoryImage(bytes),
+        return buildTrueColorWrapper(
+          isDarkMode: isDarkMode,
+          child: CircleAvatar(
+            radius: radius,
+            backgroundColor: Colors.teal,
+            backgroundImage: MemoryImage(bytes),
+          ),
         );
-      } catch (_) {
-        avatarChild = CircleAvatar(
-          radius: radius,
-          backgroundColor: Colors.teal,
-          child: Icon(Icons.person, size: radius * 1.1, color: Colors.white),
-        );
-      }
-    } else {
-      avatarChild = CircleAvatar(
-        radius: radius,
-        backgroundColor: Colors.teal,
-        child: Icon(Icons.person, size: radius * 1.1, color: Colors.white),
-      );
+      } catch (_) {}
     }
-
-    // Corrects color inversion when Light Mode filter is active
-    final isDark = context.watch<TransactionProvider>().isDarkMode;
-    if (isDark) return avatarChild;
-
-    const List<double> inverseLightMatrix = <double>[
-      -0.402,  1.174,  0.228, 0, 255,
-      0.598,  0.174,  0.228, 0, 255,
-      0.598,  1.174, -0.228, 0, 255,
-      0,      0,      0,     1,   0,
-    ];
-
-    return ColorFiltered(
-      colorFilter: const ColorFilter.matrix(inverseLightMatrix),
-      child: avatarChild,
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: Colors.teal,
+      child: Icon(Icons.person, size: radius * 1.1, color: Colors.white),
     );
   }
 
@@ -151,7 +147,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               ),
             );
           },
-          child: _buildUserAvatar(txProvider.userPhotoBase64, radius: 18),
+          child: _buildUserAvatar(txProvider.userPhotoBase64, txProvider.isDarkMode, radius: 18),
         ),
       ),
     ];
@@ -336,7 +332,7 @@ class ProfileScreen extends StatefulWidget {
                             ? null
                             : () async {
                           final ok = await txProvider.pushToCloud();
-                          if (ctx.mounted) {
+                          if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 backgroundColor: ok ? Colors.teal : Colors.orange,
@@ -362,7 +358,7 @@ class ProfileScreen extends StatefulWidget {
                             ? null
                             : () async {
                           final ok = await txProvider.pullFromCloud(forceApply: true);
-                          if (ctx.mounted) {
+                          if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 backgroundColor: ok ? Colors.teal : Colors.orange,
@@ -374,6 +370,86 @@ class ProfileScreen extends StatefulWidget {
                         icon: const Icon(Icons.cloud_download_outlined, size: 18),
                         label: const Text('Pull from Cloud', style: TextStyle(fontWeight: FontWeight.bold)),
                       ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                const Divider(color: Colors.white12),
+                const SizedBox(height: 10),
+                const Text('Optional: Custom Firebase Realtime Database URL', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: urlCtrl,
+                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                        decoration: InputDecoration(
+                          hintText: 'Leave blank for FinBlend Global Cloud, or paste Firebase URL',
+                          hintStyle: const TextStyle(color: Colors.grey, fontSize: 11),
+                          filled: true,
+                          fillColor: const Color(0xFF1E1E1E),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.white12, foregroundColor: Colors.white),
+                      onPressed: () {
+                        txProvider.setCustomCloudUrl(urlCtrl.text);
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cloud Server URL updated!')));
+                      },
+                      child: const Text('Save'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Manual Cross-Device Sync Token:', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
+                    TextButton.icon(
+                      onPressed: () {
+                        final token = txProvider.generateSyncCode();
+                        Clipboard.setData(ClipboardData(text: token));
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sync Token copied to clipboard!')));
+                      },
+                      icon: const Icon(Icons.copy, size: 14, color: Colors.tealAccent),
+                      label: const Text('Copy My Token', style: TextStyle(color: Colors.tealAccent, fontSize: 12)),
+                    ),
+                  ],
+                ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: codeCtrl,
+                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                        decoration: InputDecoration(
+                          hintText: 'Paste Sync Token from another device to import',
+                          hintStyle: const TextStyle(color: Colors.grey, fontSize: 11),
+                          filled: true,
+                          fillColor: const Color(0xFF1E1E1E),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.tealAccent, foregroundColor: Colors.black),
+                      onPressed: () async {
+                        if (codeCtrl.text.trim().isNotEmpty) {
+                          final ok = await txProvider.importFromSyncCode(codeCtrl.text);
+                          if (ctx.mounted) Navigator.pop(ctx);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(ok ? 'Account state restored successfully!' : 'Invalid Sync Token')),
+                            );
+                          }
+                        }
+                      },
+                      child: const Text('Restore', style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ],
                 ),
@@ -472,44 +548,24 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  Widget _buildProfileAvatar(String photoBase64) {
-    Widget avatarChild;
+  Widget _buildProfileAvatar(String photoBase64, bool isDarkMode) {
     if (photoBase64.isNotEmpty) {
       try {
         final bytes = base64Decode(photoBase64);
-        avatarChild = CircleAvatar(
-          radius: 40,
-          backgroundColor: Colors.teal,
-          backgroundImage: MemoryImage(bytes),
+        return buildTrueColorWrapper(
+          isDarkMode: isDarkMode,
+          child: CircleAvatar(
+            radius: 40,
+            backgroundColor: Colors.teal,
+            backgroundImage: MemoryImage(bytes),
+          ),
         );
-      } catch (_) {
-        avatarChild = const CircleAvatar(
-          radius: 40,
-          backgroundColor: Colors.teal,
-          child: Icon(Icons.person, size: 44, color: Colors.white),
-        );
-      }
-    } else {
-      avatarChild = const CircleAvatar(
-        radius: 40,
-        backgroundColor: Colors.teal,
-        child: Icon(Icons.person, size: 44, color: Colors.white),
-      );
+      } catch (_) {}
     }
-
-    final isDark = context.watch<TransactionProvider>().isDarkMode;
-    if (isDark) return avatarChild;
-
-    const List<double> inverseLightMatrix = <double>[
-      -0.402,  1.174,  0.228, 0, 255,
-      0.598,  0.174,  0.228, 0, 255,
-      0.598,  1.174, -0.228, 0, 255,
-      0,      0,      0,     1,   0,
-    ];
-
-    return ColorFiltered(
-      colorFilter: const ColorFilter.matrix(inverseLightMatrix),
-      child: avatarChild,
+    return const CircleAvatar(
+      radius: 40,
+      backgroundColor: Colors.teal,
+      child: Icon(Icons.person, size: 44, color: Colors.white),
     );
   }
 
@@ -577,7 +633,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       children: [
                         Stack(
                           children: [
-                            _buildProfileAvatar(txProvider.userPhotoBase64),
+                            _buildProfileAvatar(txProvider.userPhotoBase64, txProvider.isDarkMode),
                             Positioned(
                               bottom: 0,
                               right: 0,
@@ -911,7 +967,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 }
 
 // =============================================================================
-// EDIT PROFILE SCREEN WITH NATIVE IMAGE CROPPER (LINKEDIN STYLE)
+// EDIT PROFILE SCREEN WITH LINKEDIN-STYLE INTERACTIVE CROPPER (WEB + MOBILE)
 // =============================================================================
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -930,6 +986,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late TextEditingController _addressCtrl;
   String _selectedGender = 'Male';
   String _photoBase64 = '';
+  Uint8List? _originalPhotoBytes;
   bool _isSaving = false;
 
   static const List<String> _genderOptions = ['Male', 'Female', 'Other', 'Prefer not to say'];
@@ -947,54 +1004,40 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _addressCtrl = TextEditingController(text: p.userAddress);
     _selectedGender = _genderOptions.contains(p.userGender) ? p.userGender : 'Male';
     _photoBase64 = p.userPhotoBase64;
+    if (_photoBase64.isNotEmpty) {
+      try {
+        _originalPhotoBytes = base64Decode(_photoBase64);
+      } catch (_) {}
+    }
   }
 
   Future<void> _pickAndCropImage(ImageSource source) async {
     try {
       final picker = ImagePicker();
-      final XFile? picked = await picker.pickImage(source: source, maxWidth: 800, maxHeight: 800, imageQuality: 90);
+      final XFile? picked = await picker.pickImage(source: source, maxWidth: 1000, maxHeight: 1000, imageQuality: 92);
       if (picked == null) return;
 
-      // Launch Native Cropper (LinkedIn style 1:1 square crop for circular avatars)
-      final CroppedFile? croppedFile = await ImageCropper().cropFile(
-        sourcePath: picked.path,
-        aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
-        compressQuality: 85,
-        uiSettings: [
-          AndroidUiSettings(
-            toolbarTitle: 'Crop Profile Photo',
-            toolbarColor: const Color(0xFF161616),
-            toolbarWidgetColor: Colors.tealAccent,
-            initAspectRatio: CropAspectRatioPreset.square,
-            lockAspectRatio: true,
-            activeControlsWidgetColor: Colors.tealAccent,
-            backgroundColor: const Color(0xFF121212),
-          ),
-          IOSUiSettings(
-            title: 'Crop Profile Photo',
-            aspectRatioLockEnabled: true,
-            resetAspectRatioEnabled: false,
-          ),
-          WebUiSettings(
-            context: context,
-            presentStyle: CropperPresentStyle.dialog,
-            boundary: const CroppieBoundary(width: 320, height: 320),
-            viewPort: const CroppieViewPort(width: 240, height: 240, type: 'circle'),
-            enableExif: true,
-            enableZoom: true,
-            showZoomer: true,
-          ),
-        ],
-      );
+      final Uint8List rawBytes = await picked.readAsBytes();
+      _originalPhotoBytes = rawBytes;
 
-      if (croppedFile != null) {
-        final bytes = await croppedFile.readAsBytes();
-        setState(() => _photoBase64 = base64Encode(bytes));
-      }
+      if (!mounted) return;
+      await _openCropDialog(rawBytes);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Image crop error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not pick image: $e')));
       }
+    }
+  }
+
+  Future<void> _openCropDialog(Uint8List sourceBytes) async {
+    final String? croppedBase64 = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => LinkedInPhotoCropperDialog(imageBytes: sourceBytes),
+    );
+
+    if (croppedBase64 != null && mounted) {
+      setState(() => _photoBase64 = croppedBase64);
     }
   }
 
@@ -1016,6 +1059,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = context.watch<TransactionProvider>().isDarkMode;
     ImageProvider? avatarImg;
     if (_photoBase64.isNotEmpty) {
       try {
@@ -1027,7 +1071,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
         backgroundColor: const Color(0xFF121212),
-        title: const Text('Edit Profile & Crop Photo', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('Edit Profile & Photo', style: TextStyle(fontWeight: FontWeight.bold)),
       ),
       body: Center(
         child: ConstrainedBox(
@@ -1040,15 +1084,20 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 Center(
                   child: Column(
                     children: [
-                      CircleAvatar(
-                        radius: 54,
-                        backgroundColor: Colors.teal,
-                        backgroundImage: avatarImg,
-                        child: avatarImg == null ? const Icon(Icons.person, size: 58, color: Colors.white) : null,
+                      buildTrueColorWrapper(
+                        isDarkMode: isDarkMode && avatarImg != null,
+                        child: CircleAvatar(
+                          radius: 56,
+                          backgroundColor: Colors.teal,
+                          backgroundImage: avatarImg,
+                          child: avatarImg == null ? const Icon(Icons.person, size: 58, color: Colors.white) : null,
+                        ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 14),
                       Wrap(
                         spacing: 10,
+                        runSpacing: 8,
+                        alignment: WrapAlignment.center,
                         children: [
                           ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(
@@ -1057,8 +1106,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             ),
                             onPressed: () => _pickAndCropImage(ImageSource.gallery),
-                            icon: const Icon(Icons.crop, size: 16),
-                            label: const Text('Upload & Crop', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                            icon: const Icon(Icons.photo_library_outlined, size: 16),
+                            label: const Text('Upload Photo', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                           ),
                           OutlinedButton.icon(
                             style: OutlinedButton.styleFrom(
@@ -1070,9 +1119,23 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                             icon: const Icon(Icons.camera_alt_outlined, size: 16),
                             label: const Text('Camera', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                           ),
+                          if (_originalPhotoBytes != null)
+                            OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.amberAccent,
+                                side: const BorderSide(color: Colors.amberAccent),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              onPressed: () => _openCropDialog(_originalPhotoBytes!),
+                              icon: const Icon(Icons.crop_rotate, size: 16),
+                              label: const Text('Crop / Edit', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                            ),
                           if (_photoBase64.isNotEmpty)
                             TextButton(
-                              onPressed: () => setState(() => _photoBase64 = ''),
+                              onPressed: () => setState(() {
+                                _photoBase64 = '';
+                                _originalPhotoBytes = null;
+                              }),
                               child: const Text('Remove', style: TextStyle(color: Colors.redAccent, fontSize: 12)),
                             ),
                         ],
@@ -1187,13 +1250,233 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 }
 
 // =============================================================================
-// HELP CENTER & TERMS SCREENS
+// LINKEDIN-STYLE PHOTO CROPPER & ROTATOR DIALOG (100% WEB & MOBILE COMPATIBLE)
+// =============================================================================
+class LinkedInPhotoCropperDialog extends StatefulWidget {
+  final Uint8List imageBytes;
+  const LinkedInPhotoCropperDialog({super.key, required this.imageBytes});
+
+  @override
+  State<LinkedInPhotoCropperDialog> createState() => _LinkedInPhotoCropperDialogState();
+}
+
+class _LinkedInPhotoCropperDialogState extends State<LinkedInPhotoCropperDialog> {
+  double _zoom = 1.0;
+  Offset _panOffset = Offset.zero;
+  int _quarterTurns = 0;
+  bool _isProcessing = false;
+
+  Future<void> _applyCrop() async {
+    setState(() => _isProcessing = true);
+    try {
+      img.Image? decoded = img.decodeImage(widget.imageBytes);
+      if (decoded == null) {
+        if (mounted) Navigator.pop(context, base64Encode(widget.imageBytes));
+        return;
+      }
+
+      if (_quarterTurns % 4 != 0) {
+        decoded = img.copyRotate(decoded, angle: (_quarterTurns % 4) * 90);
+      }
+
+      final int minSide = math.min(decoded.width, decoded.height);
+      final int cropSize = (minSide / _zoom).round().clamp(40, minSide);
+
+      // Map pan offset from the 240px viewport to image pixel coordinates
+      final double normX = (-_panOffset.dx / 120.0).clamp(-1.0, 1.0);
+      final double normY = (-_panOffset.dy / 120.0).clamp(-1.0, 1.0);
+
+      final int maxOffsetX = math.max(0, (decoded.width - cropSize) ~/ 2);
+      final int maxOffsetY = math.max(0, (decoded.height - cropSize) ~/ 2);
+
+      final int centerX = decoded.width ~/ 2 + (normX * maxOffsetX).round();
+      final int centerY = decoded.height ~/ 2 + (normY * maxOffsetY).round();
+
+      final int startX = (centerX - cropSize ~/ 2).clamp(0, math.max(0, decoded.width - cropSize));
+      final int startY = (centerY - cropSize ~/ 2).clamp(0, math.max(0, decoded.height - cropSize));
+
+      final img.Image cropped = img.copyCrop(
+        decoded,
+        x: startX,
+        y: startY,
+        width: cropSize,
+        height: cropSize,
+      );
+
+      final img.Image resized = img.copyResize(cropped, width: 240, height: 240);
+      final Uint8List jpgBytes = Uint8List.fromList(img.encodeJpg(resized, quality: 88));
+
+      if (mounted) {
+        Navigator.pop(context, base64Encode(jpgBytes));
+      }
+    } catch (_) {
+      if (mounted) {
+        Navigator.pop(context, base64Encode(widget.imageBytes));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = context.watch<TransactionProvider>().isDarkMode;
+
+    return Dialog(
+      backgroundColor: const Color(0xFF181818),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 400),
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Crop & Adjust Photo', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.grey),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              const Text('Drag to reposition • Use slider to zoom', style: TextStyle(color: Colors.grey, fontSize: 12)),
+              const SizedBox(height: 16),
+
+              // CIRCULAR LINKEDIN-STYLE CROP VIEWPORT
+              GestureDetector(
+                onPanUpdate: (details) {
+                  setState(() {
+                    _panOffset += details.delta;
+                    _panOffset = Offset(
+                      _panOffset.dx.clamp(-120.0, 120.0),
+                      _panOffset.dy.clamp(-120.0, 120.0),
+                    );
+                  });
+                },
+                child: Container(
+                  width: 240,
+                  height: 240,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.black,
+                    border: Border.all(color: Colors.tealAccent, width: 2.5),
+                  ),
+                  child: ClipOval(
+                    child: buildTrueColorWrapper(
+                      isDarkMode: isDarkMode,
+                      child: Transform.translate(
+                        offset: _panOffset,
+                        child: Transform.scale(
+                          scale: _zoom,
+                          child: RotatedBox(
+                            quarterTurns: _quarterTurns,
+                            child: Image.memory(
+                              widget.imageBytes,
+                              fit: BoxFit.cover,
+                              width: 240,
+                              height: 240,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+
+              // ZOOM SLIDER
+              Row(
+                children: [
+                  const Icon(Icons.zoom_out, color: Colors.grey, size: 20),
+                  Expanded(
+                    child: Slider(
+                      value: _zoom,
+                      min: 1.0,
+                      max: 3.5,
+                      activeColor: Colors.tealAccent,
+                      inactiveColor: Colors.white12,
+                      onChanged: (v) => setState(() => _zoom = v),
+                    ),
+                  ),
+                  const Icon(Icons.zoom_in, color: Colors.tealAccent, size: 20),
+                ],
+              ),
+
+              // ROTATE & RESET CONTROLS
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  TextButton.icon(
+                    onPressed: () => setState(() => _quarterTurns = (_quarterTurns - 1) % 4),
+                    icon: const Icon(Icons.rotate_left, color: Colors.white70, size: 18),
+                    label: const Text('Rotate Left', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => setState(() => _quarterTurns = (_quarterTurns + 1) % 4),
+                    icon: const Icon(Icons.rotate_right, color: Colors.white70, size: 18),
+                    label: const Text('Rotate Right', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                  ),
+                  TextButton(
+                    onPressed: () => setState(() {
+                      _zoom = 1.0;
+                      _panOffset = Offset.zero;
+                      _quarterTurns = 0;
+                    }),
+                    child: const Text('Reset', style: TextStyle(color: Colors.tealAccent, fontSize: 12)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              // APPLY BUTTON
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.tealAccent,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  onPressed: _isProcessing ? null : _applyCrop,
+                  icon: const Icon(Icons.check_circle_outline, size: 18),
+                  label: Text(_isProcessing ? 'Processing...' : 'Apply Photo', style: const TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// HELP CENTER, CONTACT SUPPORT & TERMS SCREENS
 // =============================================================================
 class HelpCenterScreen extends StatelessWidget {
   const HelpCenterScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final faqs = [
+      {
+        'q': 'How does Cloud Sync & Multi-Device Access work?',
+        'a': 'FinBlend links your entire financial database to your Email Address and Password. When you sign in on any Android phone or Web browser anywhere in the world, your Personal Transactions, Wallets, Group Splits, Profile Photo, and Business POS records automatically download and sync.',
+      },
+      {
+        'q': 'How do I split a Trip or Group Budget with friends?',
+        'a': 'Go to the Groups tab and tap "Create Trip / Split". Enter your total target budget and add or select members from your Saved Members Directory. FinBlend calculates each person\'s required share, tracks how much each member has given, enforces budget guardrails, and computes exact peer-to-peer settlements.',
+      },
+      {
+        'q': 'How do I export my records as PDF, PNG, or JPG?',
+        'a': 'Go to Account -> Export Data (PDF, PNG, JPG). Tap PDF for a multi-page printable statement, or tap PNG / JPG to save a high-resolution visual snapshot.',
+      },
+    ];
+
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
@@ -1214,10 +1497,28 @@ class HelpCenterScreen extends StatelessWidget {
               children: [
                 Text('Welcome to FinBlend Support', style: TextStyle(color: Colors.tealAccent, fontSize: 18, fontWeight: FontWeight.bold)),
                 SizedBox(height: 6),
-                Text('Browse the guides below to master Cloud Sync, Group Splitting, and Business POS.', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                Text('Browse the interactive guides below to master Personal Finance, Group Splitting, Business POS, and Cloud Sync.', style: TextStyle(color: Colors.white70, fontSize: 13)),
               ],
             ),
           ),
+          const SizedBox(height: 20),
+          ...faqs.map((item) => Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E1E1E),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: Colors.white10),
+            ),
+            child: ExpansionTile(
+              iconColor: Colors.tealAccent,
+              collapsedIconColor: Colors.grey,
+              title: Text(item['q']!, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              children: [
+                Text(item['a']!, style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.5)),
+              ],
+            ),
+          )),
         ],
       ),
     );
@@ -1233,23 +1534,44 @@ class ContactSupportScreen extends StatefulWidget {
 
 class _ContactSupportScreenState extends State<ContactSupportScreen> {
   static const String supportEmail = 'corps.rifat@outlook.com';
+  static const List<String> _topics = ['General Inquiry', 'Bug Report', 'Cloud Sync Issue', 'Feature Request', 'Account Help'];
   String _selectedTopic = 'General Inquiry';
   final _subjectCtrl = TextEditingController();
   final _messageCtrl = TextEditingController();
   bool _isSending = false;
 
   Future<void> _sendDirectEmail(TransactionProvider provider) async {
-    final subject = _subjectCtrl.text.trim().isEmpty ? '[FinBlend $_selectedTopic] Support Request' : '[FinBlend $_selectedTopic] ${_subjectCtrl.text.trim()}';
-    final body = '${_messageCtrl.text.trim()}\n\n---\nUser Name: ${provider.userName}\nEmail: ${provider.cloudEmail}';
+    final subject = _subjectCtrl.text.trim().isEmpty
+        ? '[FinBlend $_selectedTopic] Support Request'
+        : '[FinBlend $_selectedTopic] ${_subjectCtrl.text.trim()}';
+    final body = '${_messageCtrl.text.trim()}\n\n--- User Account Info ---\nName: ${provider.userName}\nEmail: ${provider.cloudEmail}\nPhone: ${provider.userPhone}';
 
     setState(() => _isSending = true);
-    final Uri mailUri = Uri(scheme: 'mailto', path: supportEmail, query: 'subject=${Uri.encodeComponent(subject)}&body=${Uri.encodeComponent(body)}');
+
+    try {
+      await http
+          .post(
+        Uri.parse('https://ntfy.sh/finblend_support_corps_rifat'),
+        headers: {'Title': subject},
+        body: body,
+      )
+          .timeout(const Duration(seconds: 6));
+    } catch (_) {}
+
+    final Uri mailUri = Uri(
+      scheme: 'mailto',
+      path: supportEmail,
+      query: 'subject=${Uri.encodeComponent(subject)}&body=${Uri.encodeComponent(body)}',
+    );
     try {
       await launchUrl(mailUri);
     } catch (_) {}
+
     if (mounted) {
       setState(() => _isSending = false);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(backgroundColor: Colors.teal, content: Text('Opening email client for corps.rifat@outlook.com')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(backgroundColor: Colors.teal, content: Text('Message prepared for corps.rifat@outlook.com!')),
+      );
     }
   }
 
@@ -1273,31 +1595,81 @@ class _ContactSupportScreenState extends State<ContactSupportScreen> {
                     gradient: const LinearGradient(colors: [Color(0xFF141E30), Color(0xFF243B55)]),
                     borderRadius: BorderRadius.circular(22),
                   ),
-                  child: const Column(
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Direct Developer Support', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                      SizedBox(height: 8),
-                      SelectableText(supportEmail, style: TextStyle(color: Colors.tealAccent, fontSize: 16, fontWeight: FontWeight.bold)),
+                      const Text('Direct Developer Support', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const SelectableText(supportEmail, style: TextStyle(color: Colors.tealAccent, fontSize: 16, fontWeight: FontWeight.bold)),
+                          TextButton.icon(
+                            onPressed: () {
+                              Clipboard.setData(const ClipboardData(text: supportEmail));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Copied corps.rifat@outlook.com to clipboard!')),
+                              );
+                            },
+                            icon: const Icon(Icons.copy, size: 15, color: Colors.white),
+                            label: const Text('Copy', style: TextStyle(color: Colors.white, fontSize: 12)),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
+                const Text('Select Topic', style: TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _topics.map((t) {
+                    final isSel = _selectedTopic == t;
+                    return ChoiceChip(
+                      label: Text(t, style: TextStyle(color: isSel ? Colors.black : Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                      selected: isSel,
+                      selectedColor: Colors.tealAccent,
+                      backgroundColor: const Color(0xFF1E1E1E),
+                      showCheckmark: false,
+                      onSelected: (_) => setState(() => _selectedTopic = t),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 16),
                 TextField(
                   controller: _subjectCtrl,
                   style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(labelText: 'Subject', filled: true, fillColor: const Color(0xFF1E1E1E), border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none)),
+                  decoration: InputDecoration(
+                    labelText: 'Subject',
+                    labelStyle: const TextStyle(color: Colors.grey),
+                    filled: true,
+                    fillColor: const Color(0xFF1E1E1E),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: _messageCtrl,
                   maxLines: 5,
                   style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(labelText: 'Message', filled: true, fillColor: const CodeColor = Color(0xFF1E1E1E), border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none)),
+                  decoration: InputDecoration(
+                    labelText: 'Message',
+                    labelStyle: const TextStyle(color: Colors.grey),
+                    filled: true,
+                    fillColor: const Color(0xFF1E1E1E),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                  ),
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.tealAccent, foregroundColor: Colors.black, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.tealAccent,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
                   onPressed: _isSending ? null : () => _sendDirectEmail(provider),
                   icon: const Icon(Icons.send_rounded),
                   label: const Text('Send Message to corps.rifat@outlook.com', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -1321,8 +1693,39 @@ class TermsPoliciesScreen extends StatelessWidget {
       appBar: AppBar(backgroundColor: const Color(0xFF121212), title: const Text('Terms and Policies')),
       body: ListView(
         padding: const EdgeInsets.all(20),
-        children: const [
-          Text('FinBlend Terms of Service and Privacy Policy.', style: TextStyle(color: Colors.white70, fontSize: 14)),
+        children: [
+          _buildPolicyCard(
+            '1. Terms of Service',
+            'FinBlend provides dual-mode Personal Finance, Group Budget Splitting, and Business POS management across Android and Web platforms.',
+          ),
+          _buildPolicyCard(
+            '2. Cloud Sync & Data Privacy',
+            'Your financial records, profile details, wallets, and group split ledgers are isolated under your personal email account and synced securely.',
+          ),
+          _buildPolicyCard(
+            '3. Contact & Support',
+            'For account inquiries or technical support, message corps.rifat@outlook.com directly via the Contact Support screen.',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPolicyCard(String title, String body) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E1E1E),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(color: Colors.tealAccent, fontWeight: FontWeight.bold, fontSize: 15)),
+          const SizedBox(height: 8),
+          Text(body, style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.5)),
         ],
       ),
     );
