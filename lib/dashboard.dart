@@ -43,16 +43,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
     String healthLabel;
     Color healthColor;
     if (healthScore >= 80) {
-      healthLabel = 'Excellent Wealth Growth';
+      healthLabel = 'Excellent';
       healthColor = Colors.greenAccent;
     } else if (healthScore >= 60) {
-      healthLabel = 'Healthy Cashflow';
+      healthLabel = 'Healthy';
       healthColor = Colors.tealAccent;
     } else if (healthScore >= 40) {
-      healthLabel = 'Moderate Burn Rate';
+      healthLabel = 'Moderate';
       healthColor = Colors.amberAccent;
     } else {
-      healthLabel = 'High Spending Alert';
+      healthLabel = 'High Burn';
       healthColor = Colors.redAccent;
     }
 
@@ -106,6 +106,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
               ),
+              const SizedBox(width: 8),
               IconButton(
                 tooltip: _hideBalances ? 'Show Balances' : 'Privacy Mask',
                 style: IconButton.styleFrom(
@@ -124,7 +125,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 16),
 
           // ===================================================================
-          // 2. EXECUTIVE NET WORTH & HEALTH HERO CARD
+          // 2. EXECUTIVE NET WORTH & HEALTH HERO CARD (OVERFLOW-PROOF)
           // ===================================================================
           Container(
             padding: const EdgeInsets.all(22),
@@ -150,16 +151,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.shield_outlined, color: Colors.tealAccent, size: 16),
-                        SizedBox(width: 6),
-                        Text(
-                          'TOTAL COMBINED NET WORTH',
-                          style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.8),
-                        ),
-                      ],
+                    const Expanded(
+                      child: Row(
+                        children: [
+                          Icon(Icons.shield_outlined, color: Colors.tealAccent, size: 16),
+                          SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              'TOTAL COMBINED NET WORTH',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.6,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
@@ -175,14 +187,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
                 const SizedBox(height: 10),
-                Text(
-                  _fmt(totalNetWorth),
-                  style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    _fmt(totalNetWorth),
+                    style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   'Cashflow Balance: ${_fmt(netCashflow)}  •  Wallets & Banks: ${_fmt(walletsTotal)}',
                   style: const TextStyle(color: Colors.tealAccent, fontSize: 12, fontWeight: FontWeight.w600),
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 18),
 
@@ -262,58 +279,69 @@ class _DashboardScreenState extends State<DashboardScreen> {
           // 3. NEO-BANK 6-BUTTON QUICK ACTION DOCK
           // ===================================================================
           Container(
-            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
             decoration: BoxDecoration(
               color: const Color(0xFF1A1A1A),
               borderRadius: BorderRadius.circular(22),
               border: Border.all(color: Colors.white10),
             ),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildQuickActionBtn(
-                  icon: Icons.add_circle_outline_rounded,
-                  label: 'Add Income',
-                  color: Colors.greenAccent,
-                  onTap: () => _showSmartTransactionSheet(context, initialIsExpense: false),
+                Expanded(
+                  child: _buildQuickActionBtn(
+                    icon: Icons.add_circle_outline_rounded,
+                    label: 'Income',
+                    color: Colors.greenAccent,
+                    onTap: () => _showSmartTransactionSheet(context, initialIsExpense: false),
+                  ),
                 ),
-                _buildQuickActionBtn(
-                  icon: Icons.remove_circle_outline_rounded,
-                  label: 'Add Expense',
-                  color: Colors.redAccent,
-                  onTap: () => _showSmartTransactionSheet(context, initialIsExpense: true),
+                Expanded(
+                  child: _buildQuickActionBtn(
+                    icon: Icons.remove_circle_outline_rounded,
+                    label: 'Expense',
+                    color: Colors.redAccent,
+                    onTap: () => _showSmartTransactionSheet(context, initialIsExpense: true),
+                  ),
                 ),
-                _buildQuickActionBtn(
-                  icon: Icons.swap_horiz_rounded,
-                  label: 'Transfer',
-                  color: Colors.tealAccent,
-                  onTap: () => _showWalletTransferSheet(context),
+                Expanded(
+                  child: _buildQuickActionBtn(
+                    icon: Icons.swap_horiz_rounded,
+                    label: 'Transfer',
+                    color: Colors.tealAccent,
+                    onTap: () => _showWalletTransferSheet(context),
+                  ),
                 ),
-                _buildQuickActionBtn(
-                  icon: Icons.account_balance_wallet_outlined,
-                  label: 'Wallets',
-                  color: Colors.blueAccent,
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WalletsScreen())),
+                Expanded(
+                  child: _buildQuickActionBtn(
+                    icon: Icons.account_balance_wallet_outlined,
+                    label: 'Wallets',
+                    color: Colors.blueAccent,
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WalletsScreen())),
+                  ),
                 ),
-                _buildQuickActionBtn(
-                  icon: Icons.picture_as_pdf_outlined,
-                  label: 'Statement',
-                  color: Colors.orangeAccent,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => ExportScreen(userName: provider.userName, userEmail: provider.cloudEmail),
+                Expanded(
+                  child: _buildQuickActionBtn(
+                    icon: Icons.picture_as_pdf_outlined,
+                    label: 'Statement',
+                    color: Colors.orangeAccent,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ExportScreen(userName: provider.userName, userEmail: provider.cloudEmail),
+                      ),
                     ),
                   ),
                 ),
-                _buildQuickActionBtn(
-                  icon: Icons.storefront_outlined,
-                  label: 'Biz POS',
-                  color: Colors.purpleAccent,
-                  onTap: () => Navigator.pushAndRemoveUntil(
-                    context,
-                    MaterialPageRoute(builder: (_) => const BusinessNavigationScreen()),
-                        (route) => false,
+                Expanded(
+                  child: _buildQuickActionBtn(
+                    icon: Icons.storefront_outlined,
+                    label: 'Biz POS',
+                    color: Colors.purpleAccent,
+                    onTap: () => Navigator.pushAndRemoveUntil(
+                      context,
+                      MaterialPageRoute(builder: (_) => const BusinessNavigationScreen()),
+                          (route) => false,
+                    ),
                   ),
                 ),
               ],
@@ -327,7 +355,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Wallets & Banking Accounts', style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
+              const Expanded(
+                child: Text(
+                  'Wallets & Banking Accounts',
+                  style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
               TextButton.icon(
                 onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WalletsScreen())),
                 icon: const Icon(Icons.open_in_new, size: 15, color: Colors.tealAccent),
@@ -388,6 +422,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           Text(
                             _fmt(w.balance),
                             style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ),
@@ -455,7 +490,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(entry.key, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                              Expanded(
+                                child: Text(
+                                  entry.key,
+                                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
                               Text(
                                 budgetLimit != null
                                     ? '${_fmt(entry.value)} / ${_fmt(budgetLimit)} (${(pct * 100).toStringAsFixed(0)}%)'
@@ -505,47 +547,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  onChanged: (v) => setState(() => _searchQuery = v.trim()),
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                  decoration: InputDecoration(
-                    hintText: 'Search transactions...',
-                    hintStyle: const TextStyle(color: Colors.grey, fontSize: 12),
-                    prefixIcon: const Icon(Icons.search, color: Colors.tealAccent, size: 18),
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                    filled: true,
-                    fillColor: const Color(0xFF1A1A1A),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+          TextField(
+            onChanged: (v) => setState(() => _searchQuery = v.trim()),
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+            decoration: InputDecoration(
+              hintText: 'Search transactions by category, note, or date...',
+              hintStyle: const TextStyle(color: Colors.grey, fontSize: 12),
+              prefixIcon: const Icon(Icons.search, color: Colors.tealAccent, size: 18),
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+              filled: true,
+              fillColor: const Color(0xFF1A1A1A),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: ['All', 'Income', 'Expense'].map((f) {
+              final isSel = _txFilter == f;
+              return ChoiceChip(
+                label: Text(
+                  f,
+                  style: TextStyle(
+                    color: isSel ? Colors.black : Colors.white70,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              ...['All', 'Income', 'Expense'].map((f) {
-                final isSel = _txFilter == f;
-                return Padding(
-                  padding: const EdgeInsets.only(left: 4.0),
-                  child: ChoiceChip(
-                    label: Text(
-                      f,
-                      style: TextStyle(
-                        color: isSel ? Colors.black : Colors.white70,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    selected: isSel,
-                    selectedColor: Colors.tealAccent,
-                    backgroundColor: const Color(0xFF1A1A1A),
-                    showCheckmark: false,
-                    onSelected: (_) => setState(() => _txFilter = f),
-                  ),
-                );
-              }),
-            ],
+                selected: isSel,
+                selectedColor: Colors.tealAccent,
+                backgroundColor: const Color(0xFF1A1A1A),
+                showCheckmark: false,
+                onSelected: (_) => setState(() => _txFilter = f),
+              );
+            }).toList(),
           ),
           const SizedBox(height: 12),
 
@@ -663,7 +699,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       borderRadius: BorderRadius.circular(14),
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 4.0),
+        padding: const EdgeInsets.symmetric(horizontal: 2.0, vertical: 4.0),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -673,10 +709,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 color: color.withValues(alpha: 0.14),
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: Icon(icon, color: color, size: 22),
+              child: Icon(icon, color: color, size: 20),
             ),
             const SizedBox(height: 6),
-            Text(label, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600)),
+            Text(
+              label,
+              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600),
+              overflow: TextOverflow.ellipsis,
+            ),
           ],
         ),
       ),
@@ -885,7 +925,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ? (isExpense ? 'Personal Expense' : 'Personal Income')
                           : noteCtrl.text.trim();
 
-                      // Update linked wallet balance if selected
                       if (existing == null && selectedWalletId != 'none') {
                         final wIdx = provider.wallets.indexWhere((w) => w.id == selectedWalletId);
                         if (wIdx != -1) {
