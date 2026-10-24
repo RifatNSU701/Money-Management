@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 // =============================================================================
@@ -314,36 +316,57 @@ class BusinessTxModel {
 }
 
 // =============================================================================
-// UNIFIED PROVIDER (PERSONAL + BUSINESS + THEME + ALERTS)
+// UNIFIED PROVIDER (CLOUD DATABASE + MULTI-USER + RICH USER PROFILE)
 // =============================================================================
 class TransactionProvider with ChangeNotifier {
-  // Personal State
+  // Personal State (100% Empty by default for new accounts)
   List<TransactionModel> _transactions = [];
   Map<String, double> _budgets = {};
   List<String> _expenseCategories = ['Food & Dining', 'Transportation', 'Shopping', 'Entertainment'];
   List<String> _incomeCategories = ['Salary', 'Freelance / Projects', 'Investments', 'Gifts'];
   List<GroupModel> _groups = [];
-  List<String> _savedMembers = ['Rifat', 'Rahim', 'Karim', 'Sakib', 'Tanvir'];
-
-  List<WalletModel> _wallets = [
-    WalletModel(id: 'w1', name: 'Physical Cash', type: 'Cash', providerName: 'Cash', balance: 5000),
-    WalletModel(id: 'w2', name: 'bKash Personal', type: 'Mobile Banking', providerName: 'bKash', accountNumber: '017****', balance: 12500),
-    WalletModel(id: 'w3', name: 'Savings Account', type: 'Bank Account', providerName: 'DBBL (Dutch-Bangla)', accountNumber: '**** 4021', balance: 45000),
-  ];
+  List<String> _savedMembers = [];
+  List<WalletModel> _wallets = [];
   List<ScheduledTxModel> _scheduledTxs = [];
 
-  // Business State
+  // Business State (100% Empty by default for new accounts)
   List<ProductModel> _products = [];
   List<PartyModel> _parties = [];
   List<BusinessTxModel> _businessTxs = [];
+
+  // Rich User Profile State
+  String _cloudEmail = '';
+  String _userName = 'FinBlend User';
+  String _userPhone = '';
+  String _userDob = '';
+  String _userGender = '';
+  String _userOccupation = '';
+  String _userOrganization = '';
+  String _userAddress = '';
+  String _userPhotoBase64 = '';
+  String _passwordHash = '';
 
   // Appearance, Notifications & Permissions State
   bool _isDarkMode = true;
   bool _notificationsEnabled = true;
   bool _permissionsGranted = true;
 
+  // Cloud Sync State
+  String _customCloudUrl = '';
+  bool _isSyncing = false;
+  String _lastSyncedAt = 'Not synced yet';
+  String _cloudStatus = 'Cloud Ready';
+  int _lastUpdatedTimestamp = 0;
+  Timer? _autoSyncTimer;
+
   TransactionProvider() {
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _autoSyncTimer?.cancel();
+    super.dispose();
   }
 
   // Getters
@@ -356,9 +379,25 @@ class TransactionProvider with ChangeNotifier {
   List<WalletModel> get wallets => _wallets;
   List<ScheduledTxModel> get scheduledTxs => _scheduledTxs;
 
+  // User Profile Getters
+  String get cloudEmail => _cloudEmail.isEmpty ? 'Not signed in' : _cloudEmail;
+  String get userName => _userName;
+  String get userPhone => _userPhone;
+  String get userDob => _userDob;
+  String get userGender => _userGender;
+  String get userOccupation => _userOccupation;
+  String get userOrganization => _userOrganization;
+  String get userAddress => _userAddress;
+  String get userPhotoBase64 => _userPhotoBase64;
+
   bool get isDarkMode => _isDarkMode;
   bool get notificationsEnabled => _notificationsEnabled;
   bool get permissionsGranted => _permissionsGranted;
+
+  String get customCloudUrl => _customCloudUrl;
+  bool get isSyncing => _isSyncing;
+  String get lastSyncedAt => _lastSyncedAt;
+  String get cloudStatus => _cloudStatus;
 
   double get totalIncome => _transactions.where((tx) => !tx.isExpense).fold(0, (sum, tx) => sum + tx.amount);
   double get totalExpense => _transactions.where((tx) => tx.isExpense).fold(0, (sum, tx) => sum + tx.amount);
@@ -387,50 +426,524 @@ class TransactionProvider with ChangeNotifier {
     return '${months[now.month - 1]} ${now.day}, ${now.year} • $hour:$minute $amPm';
   }
 
-  // --- PERSISTENCE ---
+  String _getCloudChannelKey(String email) {
+    final clean = email.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_');
+    return 'finblend_cloud_db_v3_$clean';
+  }
+
+  String _hashPassword(String password) {
+    return base64Encode(utf8.encode('fb_salt_${password.trim()}'));
+  }
+
+  // Completely empty state for new user accounts
+  void _resetToCleanAccount() {
+    _transactions = [];
+    _budgets = {};
+    _expenseCategories = ['Food & Dining', 'Transportation', 'Shopping', 'Entertainment'];
+    _incomeCategories = ['Salary', 'Freelance / Projects', 'Investments', 'Gifts'];
+    _groups = [];
+    _savedMembers = [];
+    _wallets = [];
+    _scheduledTxs = [];
+    _products = [];
+    _parties = [];
+    _businessTxs = [];
+    _userPhone = '';
+    _userDob = '';
+    _userGender = '';
+    _userOccupation = '';
+    _userOrganization = '';
+    _userAddress = '';
+    _userPhotoBase64 = '';
+    _lastUpdatedTimestamp = DateTime.now().millisecondsSinceEpoch;
+  }
+
+  Map<String, dynamic> exportFullStateMap() {
+    if (_lastUpdatedTimestamp == 0) {
+      _lastUpdatedTimestamp = DateTime.now().millisecondsSinceEpoch;
+    }
+    return {
+      'updatedAt': _lastUpdatedTimestamp,
+      'email': _cloudEmail,
+      'userName': _userName,
+      'userPhone': _userPhone,
+      'userDob': _userDob,
+      'userGender': _userGender,
+      'userOccupation': _userOccupation,
+      'userOrganization': _userOrganization,
+      'userAddress': _userAddress,
+      'userPhotoBase64': _userPhotoBase64,
+      'passwordHash': _passwordHash,
+      'tx_data': _transactions.map((t) => t.toJson()).toList(),
+      'bdg_data': _budgets,
+      'exp_cat_data': _expenseCategories,
+      'inc_cat_data': _incomeCategories,
+      'grp_data': _groups.map((g) => g.toJson()).toList(),
+      'saved_members_data': _savedMembers,
+      'wal_data': _wallets.map((w) => w.toJson()).toList(),
+      'sch_data': _scheduledTxs.map((s) => s.toJson()).toList(),
+      'biz_prod_data': _products.map((p) => p.toJson()).toList(),
+      'biz_party_data': _parties.map((p) => p.toJson()).toList(),
+      'biz_tx_data': _businessTxs.map((t) => t.toJson()).toList(),
+      'pref_dark_mode': _isDarkMode,
+    };
+  }
+
+  void _applyStateMap(Map<String, dynamic> map) {
+    _lastUpdatedTimestamp = (map['updatedAt'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch;
+    if (map['userName'] != null) _userName = map['userName'].toString();
+    if (map['userPhone'] != null) _userPhone = map['userPhone'].toString();
+    if (map['userDob'] != null) _userDob = map['userDob'].toString();
+    if (map['userGender'] != null) _userGender = map['userGender'].toString();
+    if (map['userOccupation'] != null) _userOccupation = map['userOccupation'].toString();
+    if (map['userOrganization'] != null) _userOrganization = map['userOrganization'].toString();
+    if (map['userAddress'] != null) _userAddress = map['userAddress'].toString();
+    if (map['userPhotoBase64'] != null) _userPhotoBase64 = map['userPhotoBase64'].toString();
+    if (map['passwordHash'] != null && map['passwordHash'].toString().isNotEmpty) {
+      _passwordHash = map['passwordHash'].toString();
+    }
+    if (map['tx_data'] != null) {
+      _transactions = (map['tx_data'] as List).map((i) => TransactionModel.fromJson(Map<String, dynamic>.from(i))).toList();
+    }
+    if (map['bdg_data'] != null) {
+      _budgets = Map<String, double>.from((map['bdg_data'] as Map).map((k, v) => MapEntry(k.toString(), (v as num).toDouble())));
+    }
+    if (map['exp_cat_data'] != null) _expenseCategories = List<String>.from(map['exp_cat_data']);
+    if (map['inc_cat_data'] != null) _incomeCategories = List<String>.from(map['inc_cat_data']);
+    if (map['grp_data'] != null) {
+      _groups = (map['grp_data'] as List).map((i) => GroupModel.fromJson(Map<String, dynamic>.from(i))).toList();
+    }
+    if (map['saved_members_data'] != null) _savedMembers = List<String>.from(map['saved_members_data']);
+    if (map['wal_data'] != null) {
+      _wallets = (map['wal_data'] as List).map((i) => WalletModel.fromJson(Map<String, dynamic>.from(i))).toList();
+    }
+    if (map['sch_data'] != null) {
+      _scheduledTxs = (map['sch_data'] as List).map((i) => ScheduledTxModel.fromJson(Map<String, dynamic>.from(i))).toList();
+    }
+    if (map['biz_prod_data'] != null) {
+      _products = (map['biz_prod_data'] as List).map((i) => ProductModel.fromJson(Map<String, dynamic>.from(i))).toList();
+    }
+    if (map['biz_party_data'] != null) {
+      _parties = (map['biz_party_data'] as List).map((i) => PartyModel.fromJson(Map<String, dynamic>.from(i))).toList();
+    }
+    if (map['biz_tx_data'] != null) {
+      _businessTxs = (map['biz_tx_data'] as List).map((i) => BusinessTxModel.fromJson(Map<String, dynamic>.from(i))).toList();
+    }
+    if (map['pref_dark_mode'] != null) _isDarkMode = map['pref_dark_mode'] as bool;
+  }
+
   Future<void> _loadData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      if (prefs.containsKey('tx_data')) _transactions = (jsonDecode(prefs.getString('tx_data')!) as List).map((i) => TransactionModel.fromJson(i)).toList();
-      if (prefs.containsKey('bdg_data')) _budgets = Map<String, double>.from(jsonDecode(prefs.getString('bdg_data')!));
-      if (prefs.containsKey('exp_cat_data')) _expenseCategories = List<String>.from(jsonDecode(prefs.getString('exp_cat_data')!));
-      if (prefs.containsKey('inc_cat_data')) _incomeCategories = List<String>.from(jsonDecode(prefs.getString('inc_cat_data')!));
-      if (prefs.containsKey('grp_data')) _groups = (jsonDecode(prefs.getString('grp_data')!) as List).map((i) => GroupModel.fromJson(i)).toList();
-      if (prefs.containsKey('saved_members_data')) _savedMembers = List<String>.from(jsonDecode(prefs.getString('saved_members_data')!));
-      if (prefs.containsKey('wal_data')) _wallets = (jsonDecode(prefs.getString('wal_data')!) as List).map((i) => WalletModel.fromJson(i)).toList();
-      if (prefs.containsKey('sch_data')) _scheduledTxs = (jsonDecode(prefs.getString('sch_data')!) as List).map((i) => ScheduledTxModel.fromJson(i)).toList();
-
-      if (prefs.containsKey('biz_prod_data')) _products = (jsonDecode(prefs.getString('biz_prod_data')!) as List).map((i) => ProductModel.fromJson(i)).toList();
-      if (prefs.containsKey('biz_party_data')) _parties = (jsonDecode(prefs.getString('biz_party_data')!) as List).map((i) => PartyModel.fromJson(i)).toList();
-      if (prefs.containsKey('biz_tx_data')) _businessTxs = (jsonDecode(prefs.getString('biz_tx_data')!) as List).map((i) => BusinessTxModel.fromJson(i)).toList();
-
+      _customCloudUrl = prefs.getString('custom_cloud_url') ?? '';
+      _lastSyncedAt = prefs.getString('last_synced_at') ?? 'Not synced yet';
       if (prefs.containsKey('pref_dark_mode')) _isDarkMode = prefs.getBool('pref_dark_mode') ?? true;
       if (prefs.containsKey('pref_notif')) _notificationsEnabled = prefs.getBool('pref_notif') ?? true;
       if (prefs.containsKey('pref_perm')) _permissionsGranted = prefs.getBool('pref_perm') ?? true;
+
+      final isLogged = prefs.getBool('is_logged_in') ?? false;
+      _cloudEmail = (prefs.getString('user_email') ?? '').trim().toLowerCase();
+      _userName = prefs.getString('user_name') ?? 'FinBlend User';
+
+      if (isLogged && _cloudEmail.isNotEmpty) {
+        final localKey = 'account_cache_${_getCloudChannelKey(_cloudEmail)}';
+        if (prefs.containsKey(localKey)) {
+          final cachedMap = jsonDecode(prefs.getString(localKey)!) as Map<String, dynamic>;
+          _applyStateMap(cachedMap);
+        }
+        _startAutoSyncTimer();
+        unawaited(pullFromCloud(silent: true));
+      }
     } catch (e) {
       debugPrint("Data load error: $e");
     }
     notifyListeners();
   }
 
-  Future<void> _saveData() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('tx_data', jsonEncode(_transactions.map((t) => t.toJson()).toList()));
-    await prefs.setString('bdg_data', jsonEncode(_budgets));
-    await prefs.setString('exp_cat_data', jsonEncode(_expenseCategories));
-    await prefs.setString('inc_cat_data', jsonEncode(_incomeCategories));
-    await prefs.setString('grp_data', jsonEncode(_groups.map((g) => g.toJson()).toList()));
-    await prefs.setString('saved_members_data', jsonEncode(_savedMembers));
-    await prefs.setString('wal_data', jsonEncode(_wallets.map((w) => w.toJson()).toList()));
-    await prefs.setString('sch_data', jsonEncode(_scheduledTxs.map((s) => s.toJson()).toList()));
+  void _startAutoSyncTimer() {
+    _autoSyncTimer?.cancel();
+    _autoSyncTimer = Timer.periodic(const Duration(seconds: 8), (_) {
+      if (_cloudEmail.isNotEmpty && !_isSyncing) {
+        pullFromCloud(silent: true);
+      }
+    });
+  }
 
-    await prefs.setString('biz_prod_data', jsonEncode(_products.map((p) => p.toJson()).toList()));
-    await prefs.setString('biz_party_data', jsonEncode(_parties.map((p) => p.toJson()).toList()));
-    await prefs.setString('biz_tx_data', jsonEncode(_businessTxs.map((t) => t.toJson()).toList()));
+  Future<void> _saveData({bool syncCloud = true}) async {
+    _lastUpdatedTimestamp = DateTime.now().millisecondsSinceEpoch;
+    final prefs = await SharedPreferences.getInstance();
 
     await prefs.setBool('pref_dark_mode', _isDarkMode);
     await prefs.setBool('pref_notif', _notificationsEnabled);
     await prefs.setBool('pref_perm', _permissionsGranted);
+    await prefs.setString('user_name', _userName);
+    await prefs.setString('user_email', _cloudEmail);
+
+    if (_cloudEmail.isNotEmpty) {
+      final localKey = 'account_cache_${_getCloudChannelKey(_cloudEmail)}';
+      await prefs.setString(localKey, jsonEncode(exportFullStateMap()));
+    }
+
+    if (syncCloud && _cloudEmail.isNotEmpty) {
+      unawaited(pushToCloud(silent: true));
+    }
+  }
+
+  // --- UPDATE RICH USER PROFILE ---
+  Future<void> updateUserProfile({
+    required String name,
+    required String email,
+    required String phone,
+    required String dob,
+    required String gender,
+    required String occupation,
+    required String organization,
+    required String address,
+    required String photoBase64,
+  }) async {
+    final cleanEmail = email.trim().toLowerCase();
+    _userName = name.trim();
+    if (cleanEmail.isNotEmpty) {
+      _cloudEmail = cleanEmail;
+    }
+    _userPhone = phone.trim();
+    _userDob = dob.trim();
+    _userGender = gender.trim();
+    _userOccupation = occupation.trim();
+    _userOrganization = organization.trim();
+    _userAddress = address.trim();
+    _userPhotoBase64 = photoBase64;
+
+    await _saveData(syncCloud: true);
+    notifyListeners();
+  }
+
+  // --- CLOUD ACCOUNT AUTHENTICATION ---
+  Future<Map<String, dynamic>> authenticateCloudAccount({
+    required String name,
+    required String email,
+    required String password,
+    required bool isSignUp,
+  }) async {
+    final cleanEmail = email.trim().toLowerCase();
+    final passHash = _hashPassword(password);
+    _isSyncing = true;
+    _cloudStatus = 'Connecting to Cloud...';
+    notifyListeners();
+
+    final prefs = await SharedPreferences.getInstance();
+    final remoteMap = await _fetchRemoteCloudMap(cleanEmail);
+
+    if (isSignUp) {
+      if (remoteMap != null &&
+          remoteMap['passwordHash'] != null &&
+          remoteMap['passwordHash'].toString().isNotEmpty &&
+          remoteMap['passwordHash'] != passHash) {
+        _isSyncing = false;
+        _cloudStatus = 'Account exists';
+        notifyListeners();
+        return {
+          'success': false,
+          'message': 'An account with this email already exists in the Cloud. Please Sign In instead.',
+        };
+      }
+
+      // Start 100% clean & empty for a new signup
+      _resetToCleanAccount();
+      _cloudEmail = cleanEmail;
+      _userName = name.trim().isEmpty ? cleanEmail.split('@').first : name.trim();
+      _passwordHash = passHash;
+
+      // Clear any legacy shared_preferences keys on this device so nothing leaks into the new account
+      await prefs.remove('tx_data');
+      await prefs.remove('bdg_data');
+      await prefs.remove('grp_data');
+      await prefs.remove('saved_members_data');
+      await prefs.remove('wal_data');
+      await prefs.remove('sch_data');
+      await prefs.remove('biz_prod_data');
+      await prefs.remove('biz_party_data');
+      await prefs.remove('biz_tx_data');
+
+      await prefs.setBool('is_logged_in', true);
+      await prefs.setString('user_name', _userName);
+      await prefs.setString('user_email', _cloudEmail);
+
+      await _saveData(syncCloud: false);
+      await pushToCloud(silent: false);
+      _startAutoSyncTimer();
+
+      return {'success': true, 'message': 'Clean Cloud account created and synced!'};
+    } else {
+      if (remoteMap != null) {
+        final cloudPassHash = remoteMap['passwordHash']?.toString() ?? '';
+        if (cloudPassHash.isNotEmpty && cloudPassHash != passHash) {
+          _isSyncing = false;
+          _cloudStatus = 'Auth Failed';
+          notifyListeners();
+          return {
+            'success': false,
+            'message': 'Incorrect password for this Cloud account.',
+          };
+        }
+
+        _resetToCleanAccount();
+        _cloudEmail = cleanEmail;
+        _passwordHash = passHash;
+        _applyStateMap(remoteMap);
+        if (_passwordHash.isEmpty) _passwordHash = passHash;
+
+        await prefs.setBool('is_logged_in', true);
+        await prefs.setString('user_name', _userName);
+        await prefs.setString('user_email', _cloudEmail);
+
+        await _saveData(syncCloud: false);
+        _lastSyncedAt = _generateTimestamp();
+        _cloudStatus = 'Synced with Cloud ✓';
+        _isSyncing = false;
+        _startAutoSyncTimer();
+        notifyListeners();
+
+        return {'success': true, 'message': 'Signed in and loaded your Cloud account!'};
+      } else {
+        final localKey = 'account_cache_${_getCloudChannelKey(cleanEmail)}';
+        if (prefs.containsKey(localKey)) {
+          final cachedMap = jsonDecode(prefs.getString(localKey)!) as Map<String, dynamic>;
+          final cachedPass = cachedMap['passwordHash']?.toString() ?? '';
+          if (cachedPass.isNotEmpty && cachedPass != passHash) {
+            _isSyncing = false;
+            notifyListeners();
+            return {'success': false, 'message': 'Incorrect password.'};
+          }
+          _resetToCleanAccount();
+          _cloudEmail = cleanEmail;
+          _passwordHash = passHash;
+          _applyStateMap(cachedMap);
+        } else {
+          _resetToCleanAccount();
+          _cloudEmail = cleanEmail;
+          _userName = name.trim().isEmpty ? cleanEmail.split('@').first : name.trim();
+          _passwordHash = passHash;
+        }
+
+        await prefs.setBool('is_logged_in', true);
+        await prefs.setString('user_name', _userName);
+        await prefs.setString('user_email', _cloudEmail);
+
+        await _saveData(syncCloud: false);
+        await pushToCloud(silent: false);
+        _startAutoSyncTimer();
+
+        return {'success': true, 'message': 'Signed in and synced to Cloud!'};
+      }
+    }
+  }
+
+  Future<void> clearSessionOnLogout() async {
+    _autoSyncTimer?.cancel();
+    if (_cloudEmail.isNotEmpty) {
+      await pushToCloud(silent: true);
+    }
+    _cloudEmail = '';
+    _userName = 'FinBlend User';
+    _passwordHash = '';
+    _resetToCleanAccount();
+    notifyListeners();
+  }
+
+  Future<void> setCustomCloudUrl(String url) async {
+    _customCloudUrl = url.trim();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('custom_cloud_url', _customCloudUrl);
+    notifyListeners();
+    if (_cloudEmail.isNotEmpty) {
+      await pushToCloud();
+    }
+  }
+
+  Future<void> syncOnLogin(String email) async {
+    _cloudEmail = email.trim().toLowerCase();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('user_email', _cloudEmail);
+    _startAutoSyncTimer();
+    final pulled = await pullFromCloud(silent: false, forceApply: true);
+    if (!pulled) {
+      await pushToCloud(silent: false);
+    }
+  }
+
+  Future<Map<String, dynamic>?> _fetchRemoteCloudMap(String email) async {
+    try {
+      final channel = _getCloudChannelKey(email);
+      String? base64Payload;
+
+      if (_customCloudUrl.isNotEmpty && _customCloudUrl.startsWith('http')) {
+        final cleanBase = _customCloudUrl.endsWith('/') ? _customCloudUrl.substring(0, _customCloudUrl.length - 1) : _customCloudUrl;
+        final res = await http.get(Uri.parse('$cleanBase/finblend_users/$channel.json')).timeout(const Duration(seconds: 10));
+        if (res.statusCode == 200 && res.body != 'null' && res.body.isNotEmpty) {
+          final data = jsonDecode(res.body);
+          if (data is Map && data['payload'] != null) {
+            base64Payload = data['payload'].toString();
+          }
+        }
+      } else {
+        final res = await http
+            .get(Uri.parse('https://ntfy.sh/$channel/json?poll=1&since=all'))
+            .timeout(const Duration(seconds: 10));
+
+        if (res.statusCode == 200 && res.body.trim().isNotEmpty) {
+          final lines = res.body.trim().split('\n');
+          Map<String, dynamic>? latestMsg;
+
+          for (var line in lines) {
+            if (line.trim().isEmpty) continue;
+            final decodedLine = jsonDecode(line);
+            if (decodedLine is Map<String, dynamic> && decodedLine['event'] == 'message') {
+              latestMsg = decodedLine;
+            }
+          }
+
+          if (latestMsg != null) {
+            if (latestMsg['attachment'] != null && latestMsg['attachment']['url'] != null) {
+              final attRes = await http
+                  .get(Uri.parse(latestMsg['attachment']['url'].toString()))
+                  .timeout(const Duration(seconds: 10));
+              if (attRes.statusCode == 200) {
+                base64Payload = attRes.body.trim();
+              }
+            } else if (latestMsg['message'] != null) {
+              base64Payload = latestMsg['message'].toString().trim();
+            }
+          }
+        }
+      }
+
+      if (base64Payload != null && base64Payload.isNotEmpty) {
+        final decodedJsonStr = utf8.decode(base64Decode(base64Payload));
+        return jsonDecode(decodedJsonStr) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      debugPrint('Cloud fetch error: $e');
+    }
+    return null;
+  }
+
+  Future<bool> pushToCloud({bool silent = false}) async {
+    if (_cloudEmail.isEmpty) return false;
+    _isSyncing = true;
+    _cloudStatus = 'Syncing to Cloud...';
+    if (!silent) notifyListeners();
+
+    try {
+      final channel = _getCloudChannelKey(_cloudEmail);
+      final stateJson = jsonEncode(exportFullStateMap());
+      final base64Payload = base64Encode(utf8.encode(stateJson));
+
+      bool success = false;
+
+      if (_customCloudUrl.isNotEmpty && _customCloudUrl.startsWith('http')) {
+        final cleanBase = _customCloudUrl.endsWith('/') ? _customCloudUrl.substring(0, _customCloudUrl.length - 1) : _customCloudUrl;
+        final res = await http
+            .put(
+          Uri.parse('$cleanBase/finblend_users/$channel.json'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'payload': base64Payload,
+            'updatedAt': _lastUpdatedTimestamp,
+            'email': _cloudEmail,
+          }),
+        )
+            .timeout(const Duration(seconds: 10));
+        success = res.statusCode >= 200 && res.statusCode < 300;
+      } else {
+        final res = await http
+            .post(
+          Uri.parse('https://ntfy.sh/$channel'),
+          body: base64Payload,
+        )
+            .timeout(const Duration(seconds: 10));
+        success = res.statusCode >= 200 && res.statusCode < 300;
+      }
+
+      if (success) {
+        _lastSyncedAt = _generateTimestamp();
+        _cloudStatus = 'Synced to Cloud ✓';
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('last_synced_at', _lastSyncedAt);
+      } else {
+        _cloudStatus = 'Offline (Saved Locally)';
+      }
+      _isSyncing = false;
+      notifyListeners();
+      return success;
+    } catch (e) {
+      _isSyncing = false;
+      _cloudStatus = 'Offline Mode (Local Saved)';
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> pullFromCloud({bool silent = false, bool forceApply = false}) async {
+    if (_cloudEmail.isEmpty) return false;
+    if (!silent) {
+      _isSyncing = true;
+      _cloudStatus = 'Checking Cloud...';
+      notifyListeners();
+    }
+
+    try {
+      final remoteMap = await _fetchRemoteCloudMap(_cloudEmail);
+      if (remoteMap != null) {
+        final remoteTime = (remoteMap['updatedAt'] as num?)?.toInt() ?? 0;
+
+        if (forceApply || remoteTime >= _lastUpdatedTimestamp || _transactions.isEmpty) {
+          final changed = remoteTime != _lastUpdatedTimestamp || forceApply;
+          _applyStateMap(remoteMap);
+
+          final prefs = await SharedPreferences.getInstance();
+          final localKey = 'account_cache_${_getCloudChannelKey(_cloudEmail)}';
+          await prefs.setString(localKey, jsonEncode(exportFullStateMap()));
+          if (_userName.isNotEmpty) {
+            await prefs.setString('user_name', _userName);
+          }
+
+          _lastSyncedAt = _generateTimestamp();
+          _cloudStatus = 'Synced with Cloud ✓';
+          await prefs.setString('last_synced_at', _lastSyncedAt);
+          _isSyncing = false;
+          if (changed || !silent) notifyListeners();
+          return true;
+        }
+      }
+
+      _isSyncing = false;
+      _cloudStatus = 'Synced with Cloud ✓';
+      if (!silent) notifyListeners();
+      return false;
+    } catch (e) {
+      _isSyncing = false;
+      _cloudStatus = 'Offline Mode';
+      if (!silent) notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> importFromSyncCode(String base64Code) async {
+    try {
+      final decodedJsonStr = utf8.decode(base64Decode(base64Code.trim()));
+      final decodedMap = jsonDecode(decodedJsonStr) as Map<String, dynamic>;
+      _applyStateMap(decodedMap);
+      await _saveData(syncCloud: true);
+      notifyListeners();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  String generateSyncCode() {
+    return base64Encode(utf8.encode(jsonEncode(exportFullStateMap())));
   }
 
   // --- SAVED MEMBERS DIRECTORY CRUD ---

@@ -21,7 +21,6 @@ class FinBlendApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = context.watch<TransactionProvider>().isDarkMode;
 
-    // Hue-preserving luminance inversion matrix for crisp Light Mode across all custom cards
     const List<double> lightModeMatrix = <double>[
       0.402, -1.174, -0.228, 0, 255,
       -0.598, -0.174, -0.228, 0, 255,
@@ -30,7 +29,7 @@ class FinBlendApp extends StatelessWidget {
     ];
 
     return MaterialApp(
-      title: 'FinBlend',
+      title: 'FinBlend — Cloud Personal & Business Finance',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark().copyWith(
         scaffoldBackgroundColor: const Color(0xFF121212),
@@ -64,7 +63,7 @@ class AuthService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('is_logged_in', true);
     await prefs.setString('user_name', name);
-    await prefs.setString('user_email', email);
+    await prefs.setString('user_email', email.trim().toLowerCase());
   }
 
   static Future<void> logout() async {
@@ -115,7 +114,7 @@ class _AuthGateState extends State<AuthGate> {
 }
 
 // =============================================================================
-// LOGIN & REGISTRATION SCREEN
+// CLOUD LOGIN & REGISTRATION SCREEN (GLOBAL ACCOUNT SYNC)
 // =============================================================================
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -126,27 +125,66 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   bool _isLogin = true;
+  bool _isLoading = false;
   final _nameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
 
-  Future<void> _submit() async {
-    final email = _emailCtrl.text.trim();
-    final pass = _passCtrl.text.trim();
-    final name = _nameCtrl.text.trim().isEmpty ? email.split('@').first : _nameCtrl.text.trim();
+  @override
+  void initState() {
+    super.initState();
+    // Clear previous in-memory session when arriving on LoginScreen
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<TransactionProvider>().clearSessionOnLogout();
+      }
+    });
+  }
 
-    if (email.isEmpty || pass.isEmpty) {
+  Future<void> _submit() async {
+    final email = _emailCtrl.text.trim().toLowerCase();
+    final pass = _passCtrl.text.trim();
+    final name = _nameCtrl.text.trim();
+
+    if (email.isEmpty || !email.contains('@') || pass.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your email and password')),
+        const SnackBar(
+          backgroundColor: Colors.redAccent,
+          content: Text('Please enter a valid email address and password.'),
+        ),
       );
       return;
     }
 
-    await AuthService.login(name, email);
-    if (mounted) {
+    setState(() => _isLoading = true);
+
+    final result = await context.read<TransactionProvider>().authenticateCloudAccount(
+      name: name,
+      email: email,
+      password: pass,
+      isSignUp: !_isLogin,
+    );
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (result['success'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.teal,
+          content: Text(result['message'] ?? 'Connected to Cloud!'),
+        ),
+      );
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.redAccent,
+          content: Text(result['message'] ?? 'Authentication failed.'),
+        ),
       );
     }
   }
@@ -159,87 +197,112 @@ class _LoginScreenState extends State<LoginScreen> {
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(28.0),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Icon(Icons.account_balance_wallet_rounded, size: 68, color: Colors.tealAccent),
-                const SizedBox(height: 16),
-                const Text(
-                  'FinBlend',
-                  style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: 1.2),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  _isLogin ? 'Sign in to sync your personal & business finances' : 'Create your FinBlend account',
-                  style: const TextStyle(color: Colors.grey, fontSize: 13),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 32),
-                if (!_isLogin) ...[
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: Container(
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: const Color(0xFF181818),
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(color: Colors.tealAccent.withValues(alpha: 0.2)),
+                boxShadow: [
+                  BoxShadow(color: Colors.tealAccent.withValues(alpha: 0.06), blurRadius: 24, offset: const Offset(0, 10)),
+                ],
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Icon(Icons.cloud_done_rounded, size: 64, color: Colors.tealAccent),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'FinBlend Cloud',
+                    style: TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.bold, letterSpacing: 1.1),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _isLogin
+                        ? 'Sign in with your Email & Password from any Phone or Web Browser'
+                        : 'Create your personal Cloud Account to access from anywhere',
+                    style: const TextStyle(color: Colors.grey, fontSize: 13),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 28),
+                  if (!_isLogin) ...[
+                    TextField(
+                      controller: _nameCtrl,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: 'Full Name',
+                        hintStyle: const TextStyle(color: Colors.grey),
+                        prefixIcon: const Icon(Icons.person_outline, color: Colors.tealAccent),
+                        filled: true,
+                        fillColor: const Color(0xFF121212),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
                   TextField(
-                    controller: _nameCtrl,
+                    controller: _emailCtrl,
+                    keyboardType: TextInputType.emailAddress,
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
-                      hintText: 'Full Name',
+                      hintText: 'Email Address (Your Global Cloud ID)',
                       hintStyle: const TextStyle(color: Colors.grey),
-                      prefixIcon: const Icon(Icons.person_outline, color: Colors.tealAccent),
+                      prefixIcon: const Icon(Icons.email_outlined, color: Colors.tealAccent),
                       filled: true,
-                      fillColor: const Color(0xFF1E1E1E),
+                      fillColor: const Color(0xFF121212),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
                     ),
                   ),
                   const SizedBox(height: 14),
+                  TextField(
+                    controller: _passCtrl,
+                    obscureText: true,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'Account Password',
+                      hintStyle: const TextStyle(color: Colors.grey),
+                      prefixIcon: const Icon(Icons.lock_outline, color: Colors.tealAccent),
+                      filled: true,
+                      fillColor: const Color(0xFF121212),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.tealAccent,
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                    onPressed: _isLoading ? null : _submit,
+                    child: _isLoading
+                        ? const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black)),
+                        SizedBox(width: 12),
+                        Text('Syncing Account with Cloud...', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ],
+                    )
+                        : Text(
+                      _isLogin ? 'Sign In & Load Cloud Data' : 'Create Cloud Account',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  TextButton(
+                    onPressed: () => setState(() => _isLogin = !_isLogin),
+                    child: Text(
+                      _isLogin ? "New user? Create a Cloud Account" : 'Already have a Cloud Account? Sign In',
+                      style: const TextStyle(color: Colors.tealAccent),
+                    ),
+                  ),
                 ],
-                TextField(
-                  controller: _emailCtrl,
-                  keyboardType: TextInputType.emailAddress,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    hintText: 'Email Address',
-                    hintStyle: const TextStyle(color: Colors.grey),
-                    prefixIcon: const Icon(Icons.email_outlined, color: Colors.tealAccent),
-                    filled: true,
-                    fillColor: const Color(0xFF1E1E1E),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: _passCtrl,
-                  obscureText: true,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    hintText: 'Password',
-                    hintStyle: const TextStyle(color: Colors.grey),
-                    prefixIcon: const Icon(Icons.lock_outline, color: Colors.tealAccent),
-                    filled: true,
-                    fillColor: const Color(0xFF1E1E1E),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.tealAccent,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  ),
-                  onPressed: _submit,
-                  child: Text(_isLogin ? 'Sign In' : 'Create Account', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                ),
-                const SizedBox(height: 16),
-                TextButton(
-                  onPressed: () => setState(() => _isLogin = !_isLogin),
-                  child: Text(
-                    _isLogin ? "Don't have an account? Sign Up" : 'Already have an account? Sign In',
-                    style: const TextStyle(color: Colors.tealAccent),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),
