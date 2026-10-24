@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:image_cropper/image_cropper.dart';
 import 'package:image/image.dart' as img;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
@@ -46,20 +47,44 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   }
 
   Widget _buildUserAvatar(String photoBase64, {double radius = 18}) {
+    Widget avatarChild;
     if (photoBase64.isNotEmpty) {
       try {
         final bytes = base64Decode(photoBase64);
-        return CircleAvatar(
+        avatarChild = CircleAvatar(
           radius: radius,
           backgroundColor: Colors.teal,
           backgroundImage: MemoryImage(bytes),
         );
-      } catch (_) {}
+      } catch (_) {
+        avatarChild = CircleAvatar(
+          radius: radius,
+          backgroundColor: Colors.teal,
+          child: Icon(Icons.person, size: radius * 1.1, color: Colors.white),
+        );
+      }
+    } else {
+      avatarChild = CircleAvatar(
+        radius: radius,
+        backgroundColor: Colors.teal,
+        child: Icon(Icons.person, size: radius * 1.1, color: Colors.white),
+      );
     }
-    return CircleAvatar(
-      radius: radius,
-      backgroundColor: Colors.teal,
-      child: Icon(Icons.person, size: radius * 1.1, color: Colors.white),
+
+    // Corrects color inversion when Light Mode filter is active
+    final isDark = context.watch<TransactionProvider>().isDarkMode;
+    if (isDark) return avatarChild;
+
+    const List<double> inverseLightMatrix = <double>[
+      -0.402,  1.174,  0.228, 0, 255,
+      0.598,  0.174,  0.228, 0, 255,
+      0.598,  1.174, -0.228, 0, 255,
+      0,      0,      0,     1,   0,
+    ];
+
+    return ColorFiltered(
+      colorFilter: const ColorFilter.matrix(inverseLightMatrix),
+      child: avatarChild,
     );
   }
 
@@ -70,7 +95,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     final bool isWideWebLayout = MediaQuery.of(context).size.width >= 800;
 
     final appBarActions = [
-      // 1. CLOUD SYNC LIVE BUTTON
       IconButton(
         tooltip: 'Cloud Sync (${txProvider.cloudStatus})',
         icon: txProvider.isSyncing
@@ -82,8 +106,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             : const Icon(Icons.cloud_done_outlined, color: Colors.tealAccent),
         onPressed: () => ProfileScreen.showCloudSyncSheet(context),
       ),
-
-      // 2. LIVE NOTIFICATION BELL WITH BADGE
       Stack(
         alignment: Alignment.center,
         children: [
@@ -107,8 +129,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             ),
         ],
       ),
-
-      // 3. INSTANT DARK / LIGHT MODE TOGGLE
       IconButton(
         tooltip: 'Switch Dark / Light Mode',
         icon: Icon(
@@ -117,8 +137,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         ),
         onPressed: () => txProvider.toggleDarkMode(!txProvider.isDarkMode),
       ),
-
-      // 4. PROFILE AVATAR (SHOWS UPLOADED PHOTO)
       Padding(
         padding: const EdgeInsets.only(right: 16.0, left: 4.0),
         child: GestureDetector(
@@ -138,9 +156,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       ),
     ];
 
-    // =========================================================================
-    // RESPONSIVE DESKTOP / WEB APPLICATION LAYOUT (WIDTH >= 800px)
-    // =========================================================================
     if (isWideWebLayout) {
       return Scaffold(
         backgroundColor: const Color(0xFF0E0E0E),
@@ -222,9 +237,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       );
     }
 
-    // =========================================================================
-    // STANDARD MOBILE LAYOUT
-    // =========================================================================
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
@@ -252,7 +264,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 }
 
 // =============================================================================
-// FULLY FUNCTIONAL PROFILE, CLOUD SYNC & SETTINGS SCREEN
+// PROFILE SCREEN
 // =============================================================================
 class ProfileScreen extends StatefulWidget {
   final String userName;
@@ -365,86 +377,6 @@ class ProfileScreen extends StatefulWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 18),
-                const Divider(color: Colors.white12),
-                const SizedBox(height: 10),
-                const Text('Optional: Custom Firebase Realtime Database URL', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: urlCtrl,
-                        style: const TextStyle(color: Colors.white, fontSize: 12),
-                        decoration: InputDecoration(
-                          hintText: 'Leave blank for FinBlend Global Cloud, or paste Firebase URL',
-                          hintStyle: const TextStyle(color: Colors.grey, fontSize: 11),
-                          filled: true,
-                          fillColor: const Color(0xFF1E1E1E),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.white12, foregroundColor: Colors.white),
-                      onPressed: () {
-                        txProvider.setCustomCloudUrl(urlCtrl.text);
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cloud Server URL updated!')));
-                      },
-                      child: const Text('Save'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Manual Cross-Device Sync Token:', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
-                    TextButton.icon(
-                      onPressed: () {
-                        final token = txProvider.generateSyncCode();
-                        Clipboard.setData(ClipboardData(text: token));
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sync Token copied to clipboard!')));
-                      },
-                      icon: const Icon(Icons.copy, size: 14, color: Colors.tealAccent),
-                      label: const Text('Copy My Token', style: TextStyle(color: Colors.tealAccent, fontSize: 12)),
-                    ),
-                  ],
-                ),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: codeCtrl,
-                        style: const TextStyle(color: Colors.white, fontSize: 12),
-                        decoration: InputDecoration(
-                          hintText: 'Paste Sync Token from another device to import',
-                          hintStyle: const TextStyle(color: Colors.grey, fontSize: 11),
-                          filled: true,
-                          fillColor: const Color(0xFF1E1E1E),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.tealAccent, foregroundColor: Colors.black),
-                      onPressed: () async {
-                        if (codeCtrl.text.trim().isNotEmpty) {
-                          final ok = await txProvider.importFromSyncCode(codeCtrl.text);
-                          if (ctx.mounted) {
-                            Navigator.pop(ctx);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(ok ? 'Account state restored successfully!' : 'Invalid Sync Token')),
-                            );
-                          }
-                        }
-                      },
-                      child: const Text('Restore', style: TextStyle(fontWeight: FontWeight.bold)),
-                    ),
-                  ],
-                ),
               ],
             ),
           ),
@@ -483,20 +415,12 @@ class ProfileScreen extends StatefulWidget {
                 if (!provider.notificationsEnabled)
                   const Padding(
                     padding: EdgeInsets.all(24.0),
-                    child: Text(
-                      'Notifications are currently muted. Turn them ON above to receive budget, group, and stock alerts.',
-                      style: TextStyle(color: Colors.grey),
-                      textAlign: TextAlign.center,
-                    ),
+                    child: Text('Notifications are currently muted.', style: TextStyle(color: Colors.grey), textAlign: TextAlign.center),
                   )
                 else if (alerts.isEmpty)
                   const Padding(
                     padding: EdgeInsets.all(24.0),
-                    child: Text(
-                      '🎉 All caught up! No budget overruns, low stock, or pending bills.',
-                      style: TextStyle(color: Colors.tealAccent),
-                      textAlign: TextAlign.center,
-                    ),
+                    child: Text('🎉 All caught up!', style: TextStyle(color: Colors.tealAccent), textAlign: TextAlign.center),
                   )
                 else
                   ConstrainedBox(
@@ -535,26 +459,6 @@ class ProfileScreen extends StatefulWidget {
                       },
                     ),
                   ),
-                const SizedBox(height: 12),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.tealAccent,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  ),
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        backgroundColor: Colors.teal,
-                        content: Text('🔔 FinBlend Live Alert: Notifications & permissions are active!'),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.send_rounded, size: 18),
-                  label: const Text('Send Test Notification', style: TextStyle(fontWeight: FontWeight.bold)),
-                ),
               ],
             ),
           );
@@ -569,20 +473,43 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildProfileAvatar(String photoBase64) {
+    Widget avatarChild;
     if (photoBase64.isNotEmpty) {
       try {
         final bytes = base64Decode(photoBase64);
-        return CircleAvatar(
+        avatarChild = CircleAvatar(
           radius: 40,
           backgroundColor: Colors.teal,
           backgroundImage: MemoryImage(bytes),
         );
-      } catch (_) {}
+      } catch (_) {
+        avatarChild = const CircleAvatar(
+          radius: 40,
+          backgroundColor: Colors.teal,
+          child: Icon(Icons.person, size: 44, color: Colors.white),
+        );
+      }
+    } else {
+      avatarChild = const CircleAvatar(
+        radius: 40,
+        backgroundColor: Colors.teal,
+        child: Icon(Icons.person, size: 44, color: Colors.white),
+      );
     }
-    return const CircleAvatar(
-      radius: 40,
-      backgroundColor: Colors.teal,
-      child: Icon(Icons.person, size: 44, color: Colors.white),
+
+    final isDark = context.watch<TransactionProvider>().isDarkMode;
+    if (isDark) return avatarChild;
+
+    const List<double> inverseLightMatrix = <double>[
+      -0.402,  1.174,  0.228, 0, 255,
+      0.598,  0.174,  0.228, 0, 255,
+      0.598,  1.174, -0.228, 0, 255,
+      0,      0,      0,     1,   0,
+    ];
+
+    return ColorFiltered(
+      colorFilter: const ColorFilter.matrix(inverseLightMatrix),
+      child: avatarChild,
     );
   }
 
@@ -603,7 +530,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           child: ListView(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             children: [
-              // BUSINESS MODE SWITCHER
               GestureDetector(
                 onTap: () {
                   Navigator.pushAndRemoveUntil(
@@ -638,8 +564,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
               ),
-
-              // 1. RICH PROFILE CARD WITH PHOTO & DETAILS
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
@@ -722,8 +646,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
               const SizedBox(height: 28),
-
-              // 2. FINANCES GROUP
               _buildSectionHeader('Finances'),
               _buildSettingsGroup([
                 _buildSettingsTile(
@@ -755,8 +677,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ]),
               const SizedBox(height: 24),
-
-              // 3. PREFERENCES GROUP
               _buildSectionHeader('Preferences'),
               _buildSettingsGroup([
                 _buildSettingsTile(
@@ -779,8 +699,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ]),
               const SizedBox(height: 24),
-
-              // 4. CLOUD & DATA TOOLS GROUP
               _buildSectionHeader('Cloud & Data Tools'),
               _buildSettingsGroup([
                 _buildSettingsTile(
@@ -807,8 +725,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ]),
               const SizedBox(height: 24),
-
-              // 5. COMPLETED HELP & SUPPORT GROUP
               _buildSectionHeader('Help & Support'),
               _buildSettingsGroup([
                 _buildSettingsTile(
@@ -831,8 +747,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ]),
               const SizedBox(height: 40),
-
-              // 6. LOGOUT BUTTON
               GestureDetector(
                 onTap: () async {
                   await txProvider.clearSessionOnLogout();
@@ -891,24 +805,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const Text('Select Appearance', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
               const SizedBox(height: 16),
               ListTile(
-                leading: Icon(
-                  provider.isDarkMode ? Icons.radio_button_checked : Icons.radio_button_off,
-                  color: Colors.tealAccent,
-                ),
+                leading: Icon(provider.isDarkMode ? Icons.radio_button_checked : Icons.radio_button_off, color: Colors.tealAccent),
                 title: const Text('Premium Dark Mode (OLED)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                subtitle: const Text('Deep contrast dark theme', style: TextStyle(color: Colors.grey, fontSize: 12)),
                 onTap: () {
                   provider.toggleDarkMode(true);
                   Navigator.pop(ctx);
                 },
               ),
               ListTile(
-                leading: Icon(
-                  !provider.isDarkMode ? Icons.radio_button_checked : Icons.radio_button_off,
-                  color: Colors.tealAccent,
-                ),
+                leading: Icon(!provider.isDarkMode ? Icons.radio_button_checked : Icons.radio_button_off, color: Colors.tealAccent),
                 title: const Text('Daylight Mode (Light)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                subtitle: const Text('High-visibility light theme', style: TextStyle(color: Colors.grey, fontSize: 12)),
                 onTap: () {
                   provider.toggleDarkMode(false);
                   Navigator.pop(ctx);
@@ -937,34 +843,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 16),
               SwitchListTile(
                 activeThumbColor: Colors.tealAccent,
-                secondary: const Icon(Icons.notifications_outlined, color: Colors.tealAccent),
                 title: const Text('Push & Local Notifications', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                subtitle: const Text('Allow budget, bill, and stock alerts', style: TextStyle(color: Colors.grey, fontSize: 12)),
                 value: provider.notificationsEnabled,
                 onChanged: (v) => provider.toggleNotifications(v),
               ),
               SwitchListTile(
                 activeThumbColor: Colors.tealAccent,
-                secondary: const Icon(Icons.folder_open_outlined, color: Colors.tealAccent),
                 title: const Text('Storage & File Export Access', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                subtitle: const Text('Required for saving PDF, PNG, and JPG reports', style: TextStyle(color: Colors.grey, fontSize: 12)),
                 value: provider.permissionsGranted,
                 onChanged: (v) => provider.updatePermissions(v),
-              ),
-              const SizedBox(height: 12),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.tealAccent,
-                  foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                ),
-                onPressed: () {
-                  provider.toggleNotifications(true);
-                  provider.updatePermissions(true);
-                  Navigator.pop(ctx);
-                },
-                child: const Text('Grant All & Save', style: TextStyle(fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -1024,7 +911,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 }
 
 // =============================================================================
-// 1. COMPLETE EDIT PROFILE SCREEN (ALL 9 FIELDS + PHOTO UPLOAD & CLOUD SYNC)
+// EDIT PROFILE SCREEN WITH NATIVE IMAGE CROPPER (LINKEDIN STYLE)
 // =============================================================================
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -1062,25 +949,51 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _photoBase64 = p.userPhotoBase64;
   }
 
-  Future<void> _pickImage(ImageSource source) async {
+  Future<void> _pickAndCropImage(ImageSource source) async {
     try {
       final picker = ImagePicker();
-      final XFile? picked = await picker.pickImage(source: source, maxWidth: 400, maxHeight: 400, imageQuality: 85);
+      final XFile? picked = await picker.pickImage(source: source, maxWidth: 800, maxHeight: 800, imageQuality: 90);
       if (picked == null) return;
 
-      final Uint8List rawBytes = await picked.readAsBytes();
-      // Compress & resize to 180x180 JPG so it syncs fast over Cloud
-      final decoded = img.decodeImage(rawBytes);
-      if (decoded != null) {
-        final resized = img.copyResize(decoded, width: 180);
-        final jpgBytes = img.encodeJpg(resized, quality: 80);
-        setState(() => _photoBase64 = base64Encode(jpgBytes));
-      } else {
-        setState(() => _photoBase64 = base64Encode(rawBytes));
+      // Launch Native Cropper (LinkedIn style 1:1 square crop for circular avatars)
+      final CroppedFile? croppedFile = await ImageCropper().cropFile(
+        sourcePath: picked.path,
+        aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+        compressQuality: 85,
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: 'Crop Profile Photo',
+            toolbarColor: const Color(0xFF161616),
+            toolbarWidgetColor: Colors.tealAccent,
+            initAspectRatio: CropAspectRatioPreset.square,
+            lockAspectRatio: true,
+            activeControlsWidgetColor: Colors.tealAccent,
+            backgroundColor: const Color(0xFF121212),
+          ),
+          IOSUiSettings(
+            title: 'Crop Profile Photo',
+            aspectRatioLockEnabled: true,
+            resetAspectRatioEnabled: false,
+          ),
+          WebUiSettings(
+            context: context,
+            presentStyle: CropperPresentStyle.dialog,
+            boundary: const CroppieBoundary(width: 320, height: 320),
+            viewPort: const CroppieViewPort(width: 240, height: 240, type: 'circle'),
+            enableExif: true,
+            enableZoom: true,
+            showZoomer: true,
+          ),
+        ],
+      );
+
+      if (croppedFile != null) {
+        final bytes = await croppedFile.readAsBytes();
+        setState(() => _photoBase64 = base64Encode(bytes));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not pick image: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Image crop error: $e')));
       }
     }
   }
@@ -1114,7 +1027,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
         backgroundColor: const Color(0xFF121212),
-        title: const Text('Edit Profile', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('Edit Profile & Crop Photo', style: TextStyle(fontWeight: FontWeight.bold)),
       ),
       body: Center(
         child: ConstrainedBox(
@@ -1124,15 +1037,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // 1. PROFILE PHOTO UPLOADER
                 Center(
                   child: Column(
                     children: [
                       CircleAvatar(
-                        radius: 52,
+                        radius: 54,
                         backgroundColor: Colors.teal,
                         backgroundImage: avatarImg,
-                        child: avatarImg == null ? const Icon(Icons.person, size: 54, color: Colors.white) : null,
+                        child: avatarImg == null ? const Icon(Icons.person, size: 58, color: Colors.white) : null,
                       ),
                       const SizedBox(height: 12),
                       Wrap(
@@ -1144,9 +1056,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                               foregroundColor: Colors.black,
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             ),
-                            onPressed: () => _pickImage(ImageSource.gallery),
-                            icon: const Icon(Icons.photo_library_outlined, size: 16),
-                            label: const Text('Upload Photo', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                            onPressed: () => _pickAndCropImage(ImageSource.gallery),
+                            icon: const Icon(Icons.crop, size: 16),
+                            label: const Text('Upload & Crop', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                           ),
                           OutlinedButton.icon(
                             style: OutlinedButton.styleFrom(
@@ -1154,7 +1066,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                               side: const BorderSide(color: Colors.tealAccent),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             ),
-                            onPressed: () => _pickImage(ImageSource.camera),
+                            onPressed: () => _pickAndCropImage(ImageSource.camera),
                             icon: const Icon(Icons.camera_alt_outlined, size: 16),
                             label: const Text('Camera', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                           ),
@@ -1169,16 +1081,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
-
-                // 2. PERSONAL DETAILS FIELDS
                 _buildField(_nameCtrl, 'Full Name', Icons.person_outline),
                 const SizedBox(height: 12),
-                _buildField(_phoneCtrl, 'Phone Number (e.g., +880 17...)', Icons.phone_outlined, keyboardType: TextInputType.phone),
+                _buildField(_phoneCtrl, 'Phone Number', Icons.phone_outlined, keyboardType: TextInputType.phone),
                 const SizedBox(height: 12),
-                _buildField(_emailCtrl, 'Email Address (Cloud Account ID)', Icons.email_outlined, keyboardType: TextInputType.emailAddress),
+                _buildField(_emailCtrl, 'Email Address (Cloud ID)', Icons.email_outlined, keyboardType: TextInputType.emailAddress),
                 const SizedBox(height: 12),
-
-                // DATE OF BIRTH WITH CALENDAR PICKER
                 TextField(
                   controller: _dobCtrl,
                   readOnly: true,
@@ -1187,21 +1095,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   decoration: InputDecoration(
                     labelText: 'Date of Birth',
                     labelStyle: const TextStyle(color: Colors.grey),
-                    hintText: 'Tap to pick Date of Birth',
-                    hintStyle: const TextStyle(color: Colors.grey),
                     prefixIcon: const Icon(Icons.cake_outlined, color: Colors.tealAccent),
-                    suffixIcon: IconButton(
-                      icon: const Icon(Icons.calendar_month, color: Colors.tealAccent),
-                      onPressed: _selectDob,
-                    ),
+                    suffixIcon: IconButton(icon: const Icon(Icons.calendar_month, color: Colors.tealAccent), onPressed: _selectDob),
                     filled: true,
                     fillColor: const Color(0xFF1E1E1E),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
                   ),
                 ),
                 const SizedBox(height: 16),
-
-                // GENDER SELECTOR
                 const Text('Gender', style: TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 Wrap(
@@ -1220,15 +1121,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   }).toList(),
                 ),
                 const SizedBox(height: 16),
-
-                // OCCUPATION, ORGANIZATION & ADDRESS
                 _buildField(_occupationCtrl, 'Occupation / Designation', Icons.work_outline),
                 const SizedBox(height: 12),
-                _buildField(_organizationCtrl, 'Organization / Company / University', Icons.business_outlined),
+                _buildField(_organizationCtrl, 'Organization / Company', Icons.business_outlined),
                 const SizedBox(height: 12),
-                _buildField(_addressCtrl, 'Full Address (City, Area, Country)', Icons.location_on_outlined, maxLines: 2),
+                _buildField(_addressCtrl, 'Full Address', Icons.location_on_outlined, maxLines: 2),
                 const SizedBox(height: 28),
-
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.tealAccent,
@@ -1289,36 +1187,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 }
 
 // =============================================================================
-// 2. COMPLETE HELP CENTER SCREEN
+// HELP CENTER & TERMS SCREENS
 // =============================================================================
 class HelpCenterScreen extends StatelessWidget {
   const HelpCenterScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final faqs = [
-      {
-        'q': 'How does Cloud Sync & Multi-Device Access work?',
-        'a': 'FinBlend links your entire financial database to your Email Address and Password. When you sign in on any Android phone or Web browser anywhere in the world, your Personal Transactions, Wallets, Group Splits, Profile Photo, and Business POS records automatically download and sync every 8 seconds.',
-      },
-      {
-        'q': 'How do I split a Trip or Group Budget with friends?',
-        'a': 'Go to the Groups tab and tap "Create Trip / Split". Enter your total target budget (e.g., 25,000 BDT) and add or select members from your Saved Members Directory. FinBlend calculates each person\'s required share, tracks how much each member has given, enforces budget guardrails so spending never exceeds the plan budget, and computes exact peer-to-peer settlements under the "Settle Up" tab.',
-      },
-      {
-        'q': 'How do I manage Mobile Banking (bKash, Nagad, Rocket, Upay) & Bank Accounts?',
-        'a': 'Open Account -> Wallets & Accounts. You can add accounts under Mobile Banking (bKash, Nagad, Rocket, Upay, Tap), Bank Accounts (City Bank, BRAC, DBBL, Islami Bank, EBL, etc.), or Physical Cash, and compare all balances on a live bar chart.',
-      },
-      {
-        'q': 'How do I export my records as PDF, PNG, or JPG?',
-        'a': 'Go to Account -> Export Data (PDF, PNG, JPG). You will see a live preview of your official FinBlend Financial Statement. Tap PDF for a multi-page printable statement, or tap PNG / JPG to save a high-resolution visual snapshot.',
-      },
-      {
-        'q': 'How does Business POS Mode work?',
-        'a': 'Tap "Switch to Business Mode" in your Account screen (or the Business POS button on Web). You can log Sales, Purchases, and Business Expenses, manage Product Stock with low-stock alerts, and track Customer & Supplier Due Ledgers.',
-      },
-    ];
-
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
@@ -1339,40 +1214,16 @@ class HelpCenterScreen extends StatelessWidget {
               children: [
                 Text('Welcome to FinBlend Support', style: TextStyle(color: Colors.tealAccent, fontSize: 18, fontWeight: FontWeight.bold)),
                 SizedBox(height: 6),
-                Text(
-                  'Browse the interactive guides below to master Personal Finance, Group Splitting, Business POS, and Cloud Sync.',
-                  style: TextStyle(color: Colors.white70, fontSize: 13),
-                ),
+                Text('Browse the guides below to master Cloud Sync, Group Splitting, and Business POS.', style: TextStyle(color: Colors.white70, fontSize: 13)),
               ],
             ),
           ),
-          const SizedBox(height: 20),
-          ...faqs.map((item) => Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E1E1E),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: Colors.white10),
-            ),
-            child: ExpansionTile(
-              iconColor: Colors.tealAccent,
-              collapsedIconColor: Colors.grey,
-              title: Text(item['q']!, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              children: [
-                Text(item['a']!, style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.5)),
-              ],
-            ),
-          )),
         ],
       ),
     );
   }
 }
 
-// =============================================================================
-// 3. COMPLETE CONTACT SUPPORT SCREEN (DIRECT MESSAGE TO corps.rifat@outlook.com)
-// =============================================================================
 class ContactSupportScreen extends StatefulWidget {
   const ContactSupportScreen({super.key});
 
@@ -1387,64 +1238,27 @@ class _ContactSupportScreenState extends State<ContactSupportScreen> {
   final _messageCtrl = TextEditingController();
   bool _isSending = false;
 
-  static const List<String> _topics = ['General Inquiry', 'Bug Report', 'Cloud Sync Issue', 'Feature Request', 'Account Help'];
-
   Future<void> _sendDirectEmail(TransactionProvider provider) async {
-    final subject = _subjectCtrl.text.trim().isEmpty
-        ? '[FinBlend $_selectedTopic] Support Request'
-        : '[FinBlend $_selectedTopic] ${_subjectCtrl.text.trim()}';
-
-    final body = '${_messageCtrl.text.trim()}\n\n'
-        '--- User Account Info ---\n'
-        'Name: ${provider.userName}\n'
-        'Email: ${provider.cloudEmail}\n'
-        'Phone: ${provider.userPhone}';
+    final subject = _subjectCtrl.text.trim().isEmpty ? '[FinBlend $_selectedTopic] Support Request' : '[FinBlend $_selectedTopic] ${_subjectCtrl.text.trim()}';
+    final body = '${_messageCtrl.text.trim()}\n\n---\nUser Name: ${provider.userName}\nEmail: ${provider.cloudEmail}';
 
     setState(() => _isSending = true);
-
-    // 1. Also dispatch to cloud support relay so message is logged even if device has no mail app
-    try {
-      await http
-          .post(
-        Uri.parse('https://ntfy.sh/finblend_support_corps_rifat'),
-        headers: {'Title': subject},
-        body: body,
-      )
-          .timeout(const Duration(seconds: 6));
-    } catch (_) {}
-
-    // 2. Open native Email Client / Outlook / Gmail addressed directly to corps.rifat@outlook.com
-    final Uri mailUri = Uri(
-      scheme: 'mailto',
-      path: supportEmail,
-      query: 'subject=${Uri.encodeComponent(subject)}&body=${Uri.encodeComponent(body)}',
-    );
-
+    final Uri mailUri = Uri(scheme: 'mailto', path: supportEmail, query: 'subject=${Uri.encodeComponent(subject)}&body=${Uri.encodeComponent(body)}');
     try {
       await launchUrl(mailUri);
     } catch (_) {}
-
     if (mounted) {
       setState(() => _isSending = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor: Colors.teal,
-          content: Text('Message prepared for corps.rifat@outlook.com!'),
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(backgroundColor: Colors.teal, content: Text('Opening email client for corps.rifat@outlook.com')));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<TransactionProvider>();
-
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF121212),
-        title: const Text('Contact Support', style: TextStyle(fontWeight: FontWeight.bold)),
-      ),
+      appBar: AppBar(backgroundColor: const Color(0xFF121212), title: const Text('Contact Support')),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 640),
@@ -1453,115 +1267,40 @@ class _ContactSupportScreenState extends State<ContactSupportScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // DIRECT SUPPORT EMAIL BANNER
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(colors: [Color(0xFF141E30), Color(0xFF243B55)]),
                     borderRadius: BorderRadius.circular(22),
-                    border: Border.all(color: Colors.tealAccent.withValues(alpha: 0.3)),
                   ),
-                  child: Column(
+                  child: const Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.support_agent_rounded, color: Colors.tealAccent, size: 28),
-                          SizedBox(width: 10),
-                          Text('Direct Developer Support', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      const Text('Official Support Email:', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                      const SizedBox(height: 4),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const SelectableText(
-                            supportEmail,
-                            style: TextStyle(color: Colors.tealAccent, fontSize: 16, fontWeight: FontWeight.bold),
-                          ),
-                          TextButton.icon(
-                            onPressed: () {
-                              Clipboard.setData(const ClipboardData(text: supportEmail));
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Copied corps.rifat@outlook.com to clipboard!')),
-                              );
-                            },
-                            icon: const Icon(Icons.copy, size: 15, color: Colors.white),
-                            label: const Text('Copy', style: TextStyle(color: Colors.white, fontSize: 12)),
-                          ),
-                        ],
-                      ),
+                      Text('Direct Developer Support', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                      SizedBox(height: 8),
+                      SelectableText(supportEmail, style: TextStyle(color: Colors.tealAccent, fontSize: 16, fontWeight: FontWeight.bold)),
                     ],
                   ),
                 ),
                 const SizedBox(height: 24),
-
-                const Text('Select Topic', style: TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: _topics.map((t) {
-                    final isSel = _selectedTopic == t;
-                    return ChoiceChip(
-                      label: Text(t, style: TextStyle(color: isSel ? Colors.black : Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                      selected: isSel,
-                      selectedColor: Colors.tealAccent,
-                      backgroundColor: const Color(0xFF1E1E1E),
-                      showCheckmark: false,
-                      onSelected: (_) => setState(() => _selectedTopic = t),
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 16),
-
                 TextField(
                   controller: _subjectCtrl,
                   style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: 'Subject',
-                    labelStyle: const TextStyle(color: Colors.grey),
-                    hintText: 'Brief summary of your question or issue',
-                    hintStyle: const TextStyle(color: Colors.grey),
-                    prefixIcon: const Icon(Icons.subject, color: Colors.tealAccent),
-                    filled: true,
-                    fillColor: const Color(0xFF1E1E1E),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                  ),
+                  decoration: InputDecoration(labelText: 'Subject', filled: true, fillColor: const Color(0xFF1E1E1E), border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none)),
                 ),
                 const SizedBox(height: 12),
-
                 TextField(
                   controller: _messageCtrl,
-                  maxLines: 6,
+                  maxLines: 5,
                   style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: 'Your Message to $supportEmail',
-                    labelStyle: const TextStyle(color: Colors.grey),
-                    hintText: 'Write your message here...',
-                    hintStyle: const TextStyle(color: Colors.grey),
-                    filled: true,
-                    fillColor: const Color(0xFF1E1E1E),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                  ),
+                  decoration: InputDecoration(labelText: 'Message', filled: true, fillColor: const CodeColor = Color(0xFF1E1E1E), border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none)),
                 ),
                 const SizedBox(height: 24),
-
                 ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.tealAccent,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  ),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.tealAccent, foregroundColor: Colors.black, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
                   onPressed: _isSending ? null : () => _sendDirectEmail(provider),
                   icon: const Icon(Icons.send_rounded),
-                  label: Text(
-                    _isSending ? 'Sending...' : 'Send Direct Message to corps.rifat@outlook.com',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                  ),
+                  label: const Text('Send Message to corps.rifat@outlook.com', style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ],
             ),
@@ -1572,9 +1311,6 @@ class _ContactSupportScreenState extends State<ContactSupportScreen> {
   }
 }
 
-// =============================================================================
-// 4. COMPLETE TERMS AND POLICIES SCREEN
-// =============================================================================
 class TermsPoliciesScreen extends StatelessWidget {
   const TermsPoliciesScreen({super.key});
 
@@ -1582,53 +1318,11 @@ class TermsPoliciesScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF121212),
-        title: const Text('Terms and Policies', style: TextStyle(fontWeight: FontWeight.bold)),
-      ),
+      appBar: AppBar(backgroundColor: const Color(0xFF121212), title: const Text('Terms and Policies')),
       body: ListView(
         padding: const EdgeInsets.all(20),
-        children: [
-          _buildPolicyCard(
-            '1. Terms of Service',
-            'FinBlend provides dual-mode Personal Finance, Group Budget Splitting, and Business POS management across Android and Web platforms. By creating an account, you agree to maintain accurate records and keep your account credentials secure.',
-          ),
-          _buildPolicyCard(
-            '2. Cloud Sync & Data Privacy Policy',
-            'Your financial records, profile details, wallets, and group split ledgers are isolated under your personal email account. Data is cached locally on your device for instant offline performance and encoded before synchronizing to the cloud.',
-          ),
-          _buildPolicyCard(
-            '3. Group Split & Settlement Accuracy',
-            'FinBlend automatically calculates per-member budget targets, individual expense shares, and peer-to-peer settlement recommendations. Budget guardrails prevent accidental overspending beyond your designated group budget.',
-          ),
-          _buildPolicyCard(
-            '4. Permissions & Document Exports',
-            'Camera, Gallery, and Storage permissions are used solely when you upload a profile photo or export your financial statements as PDF, PNG, or JPG files.',
-          ),
-          _buildPolicyCard(
-            '5. Contact & Data Rights',
-            'You can edit or delete any transaction, wallet, group plan, or business record at any time. For account inquiries or support, contact corps.rifat@outlook.com directly via the Contact Support screen.',
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPolicyCard(String title, String body) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E1E1E),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: const TextStyle(color: Colors.tealAccent, fontWeight: FontWeight.bold, fontSize: 15)),
-          const SizedBox(height: 8),
-          Text(body, style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.5)),
+        children: const [
+          Text('FinBlend Terms of Service and Privacy Policy.', style: TextStyle(color: Colors.white70, fontSize: 14)),
         ],
       ),
     );

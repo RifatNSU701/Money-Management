@@ -114,7 +114,7 @@ class _AuthGateState extends State<AuthGate> {
 }
 
 // =============================================================================
-// CLOUD LOGIN & REGISTRATION SCREEN (GLOBAL ACCOUNT SYNC)
+// CLOUD LOGIN & REGISTRATION SCREEN
 // =============================================================================
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -133,7 +133,6 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    // Clear previous in-memory session when arriving on LoginScreen
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         context.read<TransactionProvider>().clearSessionOnLogout();
