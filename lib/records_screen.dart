@@ -52,7 +52,7 @@ class _RecordsScreenState extends State<RecordsScreen> {
           ),
           const SizedBox(height: 16),
 
-          // 1. ANALYTICS CHART CARD FOR RECORDS SCREEN
+          // 1. ANALYTICS CHART CARD (OVERFLOW-PROOF HEADER)
           Container(
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
@@ -66,10 +66,14 @@ class _RecordsScreenState extends State<RecordsScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      provider.tr('Income vs Expense Ratio Chart', 'আয় বনাম ব্যয়ের তুলনামূলক চার্ট'),
-                      style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                    Expanded(
+                      child: Text(
+                        provider.tr('Income vs Expense Ratio Chart', 'আয় বনাম ব্যয়ের তুলনামূলক চার্ট'),
+                        style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
@@ -77,7 +81,7 @@ class _RecordsScreenState extends State<RecordsScreen> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        provider.tr('$receiptCount Receipts Attached', '$receiptCount টি রসিদ সংযুক্ত'),
+                        provider.tr('$receiptCount Receipts', '$receiptCount টি রসিদ'),
                         style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 11, fontWeight: FontWeight.bold),
                       ),
                     ),
@@ -174,7 +178,11 @@ class _RecordsScreenState extends State<RecordsScreen> {
                 title: Row(
                   children: [
                     Expanded(
-                      child: Text(tx.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                      child: Text(
+                        tx.title,
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     if (tx.hasAttachment)
                       InkWell(
@@ -191,7 +199,7 @@ class _RecordsScreenState extends State<RecordsScreen> {
                               const Icon(Icons.attach_file, color: Color(0xFF38BDF8), size: 12),
                               const SizedBox(width: 3),
                               Text(
-                                provider.tr('View Receipt', 'রসিদ দেখুন'),
+                                provider.tr('Receipt', 'রসিদ'),
                                 style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 10, fontWeight: FontWeight.bold),
                               ),
                             ],
