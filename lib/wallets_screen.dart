@@ -1,460 +1,272 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'providers/transaction_provider.dart';
 
-// =============================================================================
-// 1. WALLETS & ACCOUNTS SCREEN (HIERARCHICAL MOBILE BANKING & BANKS)
-// =============================================================================
 class WalletsScreen extends StatelessWidget {
   const WalletsScreen({super.key});
-
-  static const List<String> mobileProviders = ['bKash', 'Nagad', 'Rocket', 'Upay', 'Tap', 'Other MFS'];
-  static const List<String> bankProviders = [
-    'City Bank',
-    'BRAC Bank',
-    'DBBL (Dutch-Bangla)',
-    'Islami Bank',
-    'Eastern Bank (EBL)',
-    'Sonali Bank',
-    'United Commercial (UCB)',
-    'Prime Bank',
-    'Standard Chartered',
-    'Other Bank',
-  ];
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<TransactionProvider>();
-    final wallets = provider.wallets;
+    final double total = provider.totalWalletsBalance;
 
-    final cashWallets = wallets.where((w) => w.type == 'Cash').toList();
-    final mobileWallets = wallets.where((w) => w.type == 'Mobile Banking').toList();
-    final bankWallets = wallets.where((w) => w.type == 'Bank Account').toList();
-
-    double maxBal = wallets.isEmpty ? 1000 : wallets.map((w) => w.balance).reduce((a, b) => a > b ? a : b);
-    if (maxBal <= 0) maxBal = 1000;
+    final double cashSum = provider.wallets.where((w) => w.type == 'Cash').fold(0.0, (s, w) => s + w.balance);
+    final double mobileSum = provider.wallets.where((w) => w.type == 'Mobile Banking').fold(0.0, (s, w) => s + w.balance);
+    final double bankSum = provider.wallets.where((w) => w.type == 'Bank Account').fold(0.0, (s, w) => s + w.balance);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
+      backgroundColor: const Color(0xFF0F172A),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF121212),
-        title: const Text('Wallets & Accounts', style: TextStyle(fontWeight: FontWeight.bold)),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add_circle_outline, color: Colors.tealAccent),
-            onPressed: () => _showWalletSheet(context),
-          ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          // 1. TOTAL ASSET CARD + DYNAMIC BAR CHART
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(colors: [Color(0xFF141E30), Color(0xFF243B55)]),
-              borderRadius: BorderRadius.circular(28),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Total Net Worth (All Accounts)', style: TextStyle(color: Colors.white70, fontSize: 14)),
-                const SizedBox(height: 6),
-                Text('৳ ${provider.totalWalletsBalance.toStringAsFixed(0)}', style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 24),
-                if (wallets.isNotEmpty)
-                  SizedBox(
-                    height: 140,
-                    child: BarChart(
-                      BarChartData(
-                        maxY: maxBal * 1.2,
-                        gridData: const FlGridData(show: false),
-                        borderData: FlBorderData(show: false),
-                        titlesData: FlTitlesData(
-                          leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                          bottomTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              getTitlesWidget: (val, meta) {
-                                final idx = val.toInt();
-                                if (idx < 0 || idx >= wallets.length) return const SizedBox();
-                                return Padding(
-                                  padding: const EdgeInsets.only(top: 8.0),
-                                  child: Text(
-                                    wallets[idx].providerName.split(' ').first,
-                                    style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w600),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        ),
-                        barGroups: List.generate(wallets.length, (i) {
-                          return BarChartGroupData(
-                            x: i,
-                            barRods: [
-                              BarChartRodData(
-                                toY: wallets[i].balance < 0 ? 0 : wallets[i].balance,
-                                color: _getProviderColor(wallets[i].providerName, wallets[i].type),
-                                width: 22,
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                            ],
-                          );
-                        }),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 28),
-
-          // 2. MOBILE BANKING SECTION
-          _buildCategorySection(
-            context: context,
-            title: 'Mobile Banking (MFS)',
-            subtitle: 'bKash, Nagad, Rocket, Upay & Others',
-            defaultType: 'Mobile Banking',
-            items: mobileWallets,
-          ),
-          const SizedBox(height: 24),
-
-          // 3. BANK ACCOUNTS SECTION
-          _buildCategorySection(
-            context: context,
-            title: 'Bank Accounts',
-            subtitle: 'Savings, Current & Cards',
-            defaultType: 'Bank Account',
-            items: bankWallets,
-          ),
-          const SizedBox(height: 24),
-
-          // 4. CASH WALLETS SECTION
-          _buildCategorySection(
-            context: context,
-            title: 'Cash Wallets',
-            subtitle: 'Physical Cash in Hand',
-            defaultType: 'Cash',
-            items: cashWallets,
-          ),
-          const SizedBox(height: 40),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCategorySection({
-    required BuildContext context,
-    required String title,
-    required String subtitle,
-    required String defaultType,
-    required List<WalletModel> items,
-  }) {
-    final sectionTotal = items.fold<double>(0, (sum, w) => sum + w.balance);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                Text('$subtitle • Total: ৳ ${sectionTotal.toStringAsFixed(0)}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
-              ],
-            ),
-            TextButton.icon(
-              onPressed: () => _showWalletSheet(context, initialType: defaultType),
-              icon: const Icon(Icons.add, color: Colors.tealAccent, size: 18),
-              label: const Text('Add', style: TextStyle(color: Colors.tealAccent, fontWeight: FontWeight.bold)),
-            ),
-          ],
+        backgroundColor: const Color(0xFF0F172A),
+        elevation: 0,
+        title: Text(
+          provider.tr('Wallets & Bank Accounts', 'ওয়ালেট ও ব্যাংক অ্যাকাউন্ট'),
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
-        const SizedBox(height: 12),
-        if (items.isEmpty)
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(color: const Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(18), border: Border.all(color: Colors.white10)),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.info_outline, color: Colors.grey, size: 18),
-                const SizedBox(width: 8),
-                Text('No $title added yet. Tap + Add.', style: const TextStyle(color: Colors.grey, fontSize: 13)),
-              ],
-            ),
-          ),
-        ...items.map((w) {
-          final color = _getProviderColor(w.providerName, w.type);
-          final icon = w.type == 'Bank Account'
-              ? Icons.account_balance
-              : (w.type == 'Mobile Banking' ? Icons.phone_android_rounded : Icons.account_balance_wallet_rounded);
-
-          return Container(
-            margin: const EdgeInsets.only(bottom: 10),
-            decoration: BoxDecoration(color: const Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.white10)),
-            child: ListTile(
-              onTap: () => _showWalletSheet(context, existing: w),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              leading: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(14)),
-                child: Icon(icon, color: color),
-              ),
-              title: Row(
-                children: [
-                  Expanded(
-                    child: Text(w.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16), overflow: TextOverflow.ellipsis),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(color: color.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
-                    child: Text(w.providerName, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              ),
-              subtitle: Padding(
-                padding: const EdgeInsets.only(top: 4.0),
-                child: Text(
-                  w.accountNumber.isNotEmpty ? '${w.type} • ${w.accountNumber}' : '${w.type} • Tap to edit',
-                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+      ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 800),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
+            children: [
+              // 1. WALLETS ASSET DISTRIBUTION CHART
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E293B),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: const Color(0xFF334155)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      provider.tr('Asset Distribution Chart (Cash / MFS / Bank)', 'ওয়ালেট ও ব্যাংক জমার আনুপাতিক চার্ট'),
+                      style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 16),
+                    RealisticDonutChart(
+                      values: [
+                        cashSum > 0 ? cashSum : (total == 0 ? 1 : 0),
+                        mobileSum > 0 ? mobileSum : 0,
+                        bankSum > 0 ? bankSum : 0,
+                      ],
+                      colors: const [Color(0xFF10B981), Color(0xFFEC4899), Color(0xFF0EA5E9)],
+                      labels: [
+                        '${provider.tr("Physical Cash", "নগদ ক্যাশ")} (৳${cashSum.toStringAsFixed(0)})',
+                        '${provider.tr("Mobile Banking", "মোবাইল ব্যাংকিং")} (৳${mobileSum.toStringAsFixed(0)})',
+                        '${provider.tr("Bank Accounts", "ব্যাংক অ্যাকাউন্ট")} (৳${bankSum.toStringAsFixed(0)})',
+                      ],
+                      centerTitle: provider.tr('Total Funds', 'মোট জমা'),
+                      centerValue: '৳${total.toStringAsFixed(0)}',
+                    ),
+                  ],
                 ),
               ),
-              trailing: Text('৳ ${w.balance.toStringAsFixed(0)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-            ),
-          );
-        }),
-      ],
+              const SizedBox(height: 20),
+
+              if (provider.wallets.isEmpty)
+                Container(
+                  padding: const EdgeInsets.all(28),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E293B),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFF334155)),
+                  ),
+                  child: Text(
+                    provider.tr(
+                      'No wallets or bank accounts added yet. Tap "+ Add Account" below to add Cash, bKash, Nagad, or Bank accounts.',
+                      'এখনো কোনো ওয়ালেট বা ব্যাংক যুক্ত করা হয়নি। নিচে "+ অ্যাকাউন্ট যোগ করুন" বাটনে ট্যাপ করুন।',
+                    ),
+                    style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                    textAlign: TextAlign.center,
+                  ),
+                )
+              else
+                ...provider.wallets.map((w) {
+                  final double pct = total > 0 ? (w.balance / total).clamp(0.0, 1.0) : 0.0;
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFF334155)),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            const CircleAvatar(
+                              backgroundColor: Color(0xFF0F172A),
+                              child: Icon(Icons.account_balance_wallet_outlined, color: Color(0xFF38BDF8)),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(w.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                                  Text('${w.type} • ${w.providerName} ${w.accountNumber.isNotEmpty ? "• ${w.accountNumber}" : ""}', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+                                ],
+                              ),
+                            ),
+                            Text('৳${w.balance.toStringAsFixed(0)}', style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 16)),
+                            IconButton(
+                              icon: const Icon(Icons.edit_outlined, color: Color(0xFF38BDF8), size: 18),
+                              onPressed: () => _showWalletSheet(context, existing: w),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Color(0xFFEF4444), size: 18),
+                              onPressed: () => provider.deleteWallet(w.id),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: pct,
+                            minHeight: 5,
+                            backgroundColor: const Color(0xFF0F172A),
+                            color: const Color(0xFF0EA5E9),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+            ],
+          ),
+        ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: const Color(0xFF0EA5E9),
+        foregroundColor: Colors.white,
+        onPressed: () => _showWalletSheet(context),
+        icon: const Icon(Icons.add_card_rounded),
+        label: Text(provider.tr('Add Account', 'অ্যাকাউন্ট যোগ করুন'), style: const TextStyle(fontWeight: FontWeight.bold)),
+      ),
     );
   }
 
-  static Color _getProviderColor(String provider, String type) {
-    final p = provider.toLowerCase();
-    if (p.contains('bkash')) return Colors.pinkAccent;
-    if (p.contains('nagad')) return Colors.deepOrangeAccent;
-    if (p.contains('rocket')) return Colors.purpleAccent;
-    if (p.contains('upay')) return Colors.amberAccent;
-    if (type == 'Bank Account') return Colors.blueAccent;
-    if (type == 'Mobile Banking') return Colors.tealAccent;
-    return Colors.greenAccent;
-  }
-
-  void _showWalletSheet(BuildContext context, {WalletModel? existing, String? initialType}) {
-    String selectedType = existing?.type ?? initialType ?? 'Mobile Banking';
-    String selectedProvider = existing?.providerName ??
-        (selectedType == 'Mobile Banking'
-            ? mobileProviders.first
-            : (selectedType == 'Bank Account' ? bankProviders.first : 'Cash'));
-
-    final customBankCtrl = TextEditingController(
-      text: (existing != null &&
-          !mobileProviders.contains(existing.providerName) &&
-          !bankProviders.contains(existing.providerName) &&
-          existing.type != 'Cash')
-          ? existing.providerName
-          : '',
-    );
+  void _showWalletSheet(BuildContext context, {WalletModel? existing}) {
+    final provider = context.read<TransactionProvider>();
+    String selectedType = existing?.type ?? 'Mobile Banking';
+    String selectedProvider = existing?.providerName ?? 'bKash';
     final nameCtrl = TextEditingController(text: existing?.name ?? '');
-    final accNumCtrl = TextEditingController(text: existing?.accountNumber ?? '');
+    final accCtrl = TextEditingController(text: existing?.accountNumber ?? '');
     final balCtrl = TextEditingController(text: existing != null ? existing.balance.toStringAsFixed(0) : '');
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF161616),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+      backgroundColor: const Color(0xFF1E293B),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx) => StatefulBuilder(
         builder: (context, setSheetState) {
-          final List<String> currentProviders = selectedType == 'Mobile Banking'
-              ? mobileProviders
-              : (selectedType == 'Bank Account' ? bankProviders : ['Cash']);
-
-          if (!currentProviders.contains(selectedProvider)) {
-            selectedProvider = currentProviders.first;
-          }
-
-          final bool isCustomProvider = selectedProvider == 'Other MFS' || selectedProvider == 'Other Bank';
+          final List<String> providers = selectedType == 'Mobile Banking'
+              ? ['bKash', 'Nagad', 'Rocket', 'Upay']
+              : (selectedType == 'Bank Account' ? ['City Bank', 'BRAC Bank', 'DBBL', 'Islami Bank', 'EBL', 'Sonali Bank'] : ['Physical Cash']);
+          if (!providers.contains(selectedProvider)) selectedProvider = providers.first;
 
           return Padding(
-            padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom + 24, left: 24, right: 24, top: 28),
+            padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom + 24, left: 24, right: 24, top: 24),
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    existing == null ? 'Add Account / Wallet' : 'Edit Account',
-                    style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                    existing == null ? provider.tr('Add Wallet / Bank Account', 'নতুন ওয়ালেট বা ব্যাংক অ্যাকাউন্ট') : provider.tr('Edit Account', 'অ্যাকাউন্ট এডিট করুন'),
+                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 16),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: ['Mobile Banking', 'Bank Account', 'Cash'].map((t) {
-                        final isSelected = selectedType == t;
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 8.0),
-                          child: ChoiceChip(
-                            label: Text(t, style: TextStyle(color: isSelected ? Colors.black : Colors.white, fontWeight: FontWeight.bold)),
-                            selected: isSelected,
-                            selectedColor: Colors.tealAccent,
-                            backgroundColor: const Color(0xFF1E1E1E),
-                            showCheckmark: false,
-                            onSelected: (_) {
-                              setSheetState(() {
-                                selectedType = t;
-                                selectedProvider = t == 'Mobile Banking'
-                                    ? mobileProviders.first
-                                    : (t == 'Bank Account' ? bankProviders.first : 'Cash');
-                              });
-                            },
-                          ),
-                        );
-                      }).toList(),
-                    ),
+                  const SizedBox(height: 14),
+                  Wrap(
+                    spacing: 8,
+                    children: ['Cash', 'Mobile Banking', 'Bank Account'].map((t) {
+                      final isSel = selectedType == t;
+                      return ChoiceChip(
+                        label: Text(t, style: TextStyle(color: isSel ? Colors.white : const Color(0xFF94A3B8), fontSize: 12)),
+                        selected: isSel,
+                        selectedColor: const Color(0xFF0EA5E9),
+                        backgroundColor: const Color(0xFF0F172A),
+                        showCheckmark: false,
+                        onSelected: (_) => setSheetState(() => selectedType = t),
+                      );
+                    }).toList(),
                   ),
-                  const SizedBox(height: 16),
-                  if (selectedType != 'Cash') ...[
-                    Text(
-                      selectedType == 'Mobile Banking' ? 'Select MFS Provider' : 'Select Bank',
-                      style: const TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: currentProviders.map((prov) {
-                        final isProvSelected = selectedProvider == prov;
-                        final chipColor = _getProviderColor(prov, selectedType);
-                        return ChoiceChip(
-                          label: Text(prov, style: TextStyle(color: isProvSelected ? Colors.black : Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
-                          selected: isProvSelected,
-                          selectedColor: chipColor,
-                          backgroundColor: const Color(0xFF1E1E1E),
-                          showCheckmark: false,
-                          onSelected: (_) => setSheetState(() => selectedProvider = prov),
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 14),
-                  ],
-                  if (isCustomProvider) ...[
-                    TextField(
-                      controller: customBankCtrl,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText: 'Enter Service or Bank Name',
-                        hintStyle: const TextStyle(color: Colors.grey),
-                        filled: true,
-                        fillColor: const Color(0xFF1E1E1E),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    children: providers.map((p) {
+                      final isSel = selectedProvider == p;
+                      return ChoiceChip(
+                        label: Text(p, style: TextStyle(color: isSel ? Colors.white : const Color(0xFFCBD5E1), fontSize: 11)),
+                        selected: isSel,
+                        selectedColor: const Color(0xFF10B981),
+                        backgroundColor: const Color(0xFF0F172A),
+                        showCheckmark: false,
+                        onSelected: (_) => setSheetState(() => selectedProvider = p),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 12),
                   TextField(
                     controller: nameCtrl,
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
-                      hintText: selectedType == 'Mobile Banking'
-                          ? 'Account Label (e.g., Personal $selectedProvider)'
-                          : (selectedType == 'Bank Account' ? 'Account Label (e.g., Salary A/C)' : 'Wallet Name (e.g., Petty Cash)'),
-                      hintStyle: const TextStyle(color: Colors.grey, fontSize: 14),
-                      prefixIcon: const Icon(Icons.label_outline, color: Colors.tealAccent),
+                      labelText: provider.tr('Account Title (e.g., Personal bKash)', 'অ্যাকাউন্টের নাম'),
+                      labelStyle: const TextStyle(color: Color(0xFF94A3B8)),
                       filled: true,
-                      fillColor: const Color(0xFF1E1E1E),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                      fillColor: const Color(0xFF0F172A),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                     ),
                   ),
                   const SizedBox(height: 12),
-                  if (selectedType != 'Cash') ...[
-                    TextField(
-                      controller: accNumCtrl,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText: selectedType == 'Mobile Banking' ? 'Mobile Number (Optional)' : 'A/C or Card Last 4 Digits (Optional)',
-                        hintStyle: const TextStyle(color: Colors.grey, fontSize: 14),
-                        prefixIcon: const Icon(Icons.numbers, color: Colors.tealAccent),
-                        filled: true,
-                        fillColor: const Color(0xFF1E1E1E),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                      ),
+                  TextField(
+                    controller: accCtrl,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      labelText: provider.tr('Account / Mobile Number (Optional)', 'অ্যাকাউন্ট / মোবাইল নম্বর (ঐচ্ছিক)'),
+                      labelStyle: const TextStyle(color: Color(0xFF94A3B8)),
+                      filled: true,
+                      fillColor: const Color(0xFF0F172A),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                     ),
-                    const SizedBox(height: 12),
-                  ],
+                  ),
+                  const SizedBox(height: 12),
                   TextField(
                     controller: balCtrl,
                     keyboardType: TextInputType.number,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
-                      hintText: 'Current Balance (৳)',
-                      hintStyle: const TextStyle(color: Colors.grey),
-                      prefixIcon: const Icon(Icons.account_balance_wallet_outlined, color: Colors.tealAccent),
+                      labelText: provider.tr('Current Balance (৳)', 'বর্তমান ব্যালেন্স (৳)'),
+                      labelStyle: const TextStyle(color: Color(0xFF94A3B8)),
                       filled: true,
-                      fillColor: const Color(0xFF1E1E1E),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                      fillColor: const Color(0xFF0F172A),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  Row(
-                    children: [
-                      if (existing != null)
-                        Expanded(
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.redAccent.withValues(alpha: 0.2),
-                              foregroundColor: Colors.redAccent,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                            ),
-                            onPressed: () {
-                              context.read<TransactionProvider>().deleteWallet(existing.id);
-                              Navigator.pop(ctx);
-                            },
-                            child: const Text('Delete', style: TextStyle(fontWeight: FontWeight.bold)),
-                          ),
-                        ),
-                      if (existing != null) const SizedBox(width: 12),
-                      Expanded(
-                        flex: 2,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.tealAccent,
-                            foregroundColor: Colors.black,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          ),
-                          onPressed: () {
-                            final finalProvider = isCustomProvider && customBankCtrl.text.trim().isNotEmpty
-                                ? customBankCtrl.text.trim()
-                                : selectedProvider;
-                            final finalName = nameCtrl.text.trim().isNotEmpty ? nameCtrl.text.trim() : '$finalProvider Account';
-                            final balance = double.tryParse(balCtrl.text.trim()) ?? 0;
-
-                            context.read<TransactionProvider>().saveWallet(
-                              id: existing?.id,
-                              name: finalName,
-                              type: selectedType,
-                              providerName: finalProvider,
-                              accountNumber: accNumCtrl.text.trim(),
-                              balance: balance,
-                            );
-                            Navigator.pop(ctx);
-                          },
-                          child: Text(existing == null ? 'Save Account' : 'Update Account', style: const TextStyle(fontWeight: FontWeight.bold)),
-                        ),
-                      ),
-                    ],
+                  const SizedBox(height: 18),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0EA5E9), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 15)),
+                    onPressed: () {
+                      final name = nameCtrl.text.trim().isEmpty ? selectedProvider : nameCtrl.text.trim();
+                      final bal = double.tryParse(balCtrl.text.trim()) ?? 0.0;
+                      provider.saveWallet(
+                        id: existing?.id,
+                        name: name,
+                        type: selectedType,
+                        providerName: selectedProvider,
+                        accountNumber: accCtrl.text.trim(),
+                        balance: bal,
+                      );
+                      Navigator.pop(ctx);
+                    },
+                    child: Text(provider.tr('Save Account', 'অ্যাকাউন্ট সেভ করুন'), style: const TextStyle(fontWeight: FontWeight.bold)),
                   ),
                 ],
               ),
@@ -467,7 +279,7 @@ class WalletsScreen extends StatelessWidget {
 }
 
 // =============================================================================
-// 2. SCHEDULED TRANSACTIONS SCREEN
+// SCHEDULED TRANSACTIONS SCREEN (WITH CHART + RECEIPT / MEMO UPLOAD)
 // =============================================================================
 class ScheduledTransactionsScreen extends StatelessWidget {
   const ScheduledTransactionsScreen({super.key});
@@ -475,113 +287,146 @@ class ScheduledTransactionsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<TransactionProvider>();
+    final double expBills = provider.scheduledTxs.where((s) => s.isExpense).fold(0.0, (sum, s) => sum + s.amount);
+    final double incScheduled = provider.scheduledTxs.where((s) => !s.isExpense).fold(0.0, (sum, s) => sum + s.amount);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
+      backgroundColor: const Color(0xFF0F172A),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF121212),
-        title: const Text('Scheduled Transactions', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: const Color(0xFF0F172A),
+        title: Text(provider.tr('Scheduled Bills & Reminders', 'নির্ধারিত বিল ও রিমাইন্ডার')),
       ),
-      body: provider.scheduledTxs.isEmpty
-          ? const Center(child: Text('No recurring bills scheduled. Tap + to add one!', style: TextStyle(color: Colors.grey)))
-          : ListView.builder(
-        padding: const EdgeInsets.all(20),
-        itemCount: provider.scheduledTxs.length,
-        itemBuilder: (ctx, i) {
-          final s = provider.scheduledTxs[i];
-          return Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            decoration: BoxDecoration(color: const Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.white10)),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E293B),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: const Color(0xFF334155)),
+            ),
+            child: RealisticDonutChart(
+              values: [
+                expBills > 0 ? expBills : 1,
+                incScheduled > 0 ? incScheduled : 0,
+              ],
+              colors: const [Color(0xFFEF4444), Color(0xFF10B981)],
+              labels: [
+                '${provider.tr("Upcoming Bills", "আসন্ন বিল")} (৳${expBills.toStringAsFixed(0)})',
+                '${provider.tr("Expected Income", "প্রত্যাশিত আয়")} (৳${incScheduled.toStringAsFixed(0)})',
+              ],
+              centerTitle: provider.tr('Scheduled', 'মোট রিমাইন্ডার'),
+              centerValue: '${provider.scheduledTxs.length}',
+            ),
+          ),
+          const SizedBox(height: 16),
+          ...provider.scheduledTxs.map((s) => Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E293B),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFF334155)),
+            ),
             child: ListTile(
-              onTap: () => _showScheduleSheet(context, existing: s),
-              leading: CircleAvatar(
-                backgroundColor: Colors.tealAccent.withValues(alpha: 0.15),
-                child: const Icon(Icons.event_repeat, color: Colors.tealAccent),
+              title: Row(
+                children: [
+                  Expanded(child: Text(s.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                  if (s.hasAttachment)
+                    TextButton.icon(
+                      onPressed: () => AttachmentHelper.viewAttachment(context, s.attachmentBase64, s.attachmentName),
+                      icon: const Icon(Icons.attach_file, size: 14, color: Color(0xFF38BDF8)),
+                      label: Text(provider.tr('Bill Copy', 'বিল কপি'), style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 11)),
+                    ),
+                ],
               ),
-              title: Text(s.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              subtitle: Text('Due: ${s.dueDate} • ৳ ${s.amount.toStringAsFixed(0)}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
-              trailing: ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.tealAccent, foregroundColor: Colors.black),
-                onPressed: () {
-                  provider.saveTransaction(title: s.title, category: 'Scheduled', amount: s.amount, isExpense: s.isExpense);
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Logged ${s.title} to your records!')));
-                },
-                child: const Text('Pay Now', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              subtitle: Text('Due: ${s.dueDate}', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('৳${s.amount.toStringAsFixed(0)}', style: TextStyle(color: s.isExpense ? const Color(0xFFEF4444) : const Color(0xFF10B981), fontWeight: FontWeight.bold)),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Color(0xFF64748B), size: 18),
+                    onPressed: () => provider.deleteScheduledTx(s.id),
+                  ),
+                ],
               ),
             ),
-          );
-        },
+          )),
+        ],
       ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: Colors.tealAccent,
-        foregroundColor: Colors.black,
-        onPressed: () => _showScheduleSheet(context),
-        child: const Icon(Icons.add),
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: const Color(0xFF0EA5E9),
+        foregroundColor: Colors.white,
+        onPressed: () => _showAddScheduledSheet(context),
+        icon: const Icon(Icons.add_alarm_rounded),
+        label: Text(provider.tr('Add Scheduled Bill', 'নতুন বিল রিমাইন্ডার')),
       ),
     );
   }
 
-  void _showScheduleSheet(BuildContext context, {ScheduledTxModel? existing}) {
-    final titleCtrl = TextEditingController(text: existing?.title ?? '');
-    final amountCtrl = TextEditingController(text: existing != null ? existing.amount.toString() : '');
-    final dateCtrl = TextEditingController(text: existing?.dueDate ?? '5th of every month');
+  void _showAddScheduledSheet(BuildContext context) {
+    final provider = context.read<TransactionProvider>();
+    final titleCtrl = TextEditingController();
+    final amtCtrl = TextEditingController();
+    final dateCtrl = TextEditingController(text: '5th of Month');
+    bool isExp = true;
+    String attBase64 = '';
+    String attName = '';
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF161616),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom + 24, left: 24, right: 24, top: 28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(existing == null ? 'New Scheduled Bill' : 'Edit Scheduled Bill', style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-            const SizedBox(height: 16),
-            TextField(controller: titleCtrl, style: const TextStyle(color: Colors.white), decoration: InputDecoration(hintText: 'Bill Name (e.g., House Rent, WiFi)', filled: true, fillColor: const Color(0xFF1E1E1E), border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none))),
-            const SizedBox(height: 12),
-            TextField(controller: amountCtrl, keyboardType: TextInputType.number, style: const TextStyle(color: Colors.white), decoration: InputDecoration(hintText: 'Amount (৳)', filled: true, fillColor: const Color(0xFF1E1E1E), border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none))),
-            const SizedBox(height: 12),
-            TextField(controller: dateCtrl, style: const TextStyle(color: Colors.white), decoration: InputDecoration(hintText: 'Schedule (e.g., 10th of month)', filled: true, fillColor: const Color(0xFF1E1E1E), border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none))),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                if (existing != null)
-                  Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent.withValues(alpha: 0.2), foregroundColor: Colors.redAccent, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-                      onPressed: () {
-                        context.read<TransactionProvider>().deleteScheduledTx(existing.id);
-                        Navigator.pop(ctx);
-                      },
-                      child: const Text('Delete'),
-                    ),
-                  ),
-                if (existing != null) const SizedBox(width: 12),
-                Expanded(
-                  flex: 2,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.tealAccent, foregroundColor: Colors.black, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-                    onPressed: () {
-                      final amt = double.tryParse(amountCtrl.text.trim()) ?? 0;
-                      if (titleCtrl.text.trim().isNotEmpty && amt > 0) {
-                        context.read<TransactionProvider>().saveScheduledTx(
-                          id: existing?.id,
-                          title: titleCtrl.text.trim(),
-                          amount: amt,
-                          dueDate: dateCtrl.text.trim(),
-                          isExpense: true,
-                        );
-                        Navigator.pop(ctx);
-                      }
-                    },
-                    child: const Text('Save Schedule', style: TextStyle(fontWeight: FontWeight.bold)),
-                  ),
-                ),
-              ],
-            ),
-          ],
+      backgroundColor: const Color(0xFF1E293B),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setSheetState) => Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom + 24, left: 24, right: 24, top: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(provider.tr('Schedule Bill / Memo', 'নির্ধারিত বিল যোগ করুন'), style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+              const SizedBox(height: 12),
+              TextField(controller: titleCtrl, style: const TextStyle(color: Colors.white), decoration: InputDecoration(labelText: provider.tr('Bill Title (e.g., House Rent / Wi-Fi)', 'বিলের নাম'), filled: true, fillColor: const Color(0xFF0F172A), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none))),
+              const SizedBox(height: 10),
+              TextField(controller: amtCtrl, keyboardType: TextInputType.number, style: const TextStyle(color: Colors.white), decoration: InputDecoration(labelText: provider.tr('Amount (৳)', 'পরিমাণ (৳)'), filled: true, fillColor: const Color(0xFF0F172A), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none))),
+              const SizedBox(height: 10),
+              TextField(controller: dateCtrl, style: const TextStyle(color: Colors.white), decoration: InputDecoration(labelText: provider.tr('Due Date', 'পরিশোধের তারিখ'), filled: true, fillColor: const Color(0xFF0F172A), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none))),
+              const SizedBox(height: 10),
+              TextButton.icon(
+                onPressed: () async {
+                  final picked = await AttachmentHelper.pickReceiptOrMemo(context);
+                  if (picked != null) {
+                    setSheetState(() {
+                      attBase64 = picked['base64']?.toString() ?? '';
+                      attName = picked['name']?.toString() ?? '';
+                    });
+                  }
+                },
+                icon: const Icon(Icons.upload_file, color: Color(0xFF38BDF8)),
+                label: Text(attName.isEmpty ? provider.tr('Attach Bill Invoice / Memo', 'বিলের কপি যুক্ত করুন') : attName, style: const TextStyle(color: Color(0xFF38BDF8))),
+              ),
+              const SizedBox(height: 14),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0EA5E9), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)),
+                onPressed: () {
+                  final amt = double.tryParse(amtCtrl.text.trim()) ?? 0.0;
+                  if (titleCtrl.text.trim().isEmpty || amt <= 0) return;
+                  provider.saveScheduledTx(
+                    title: titleCtrl.text.trim(),
+                    amount: amt,
+                    dueDate: dateCtrl.text.trim(),
+                    isExpense: isExp,
+                    attachmentBase64: attBase64,
+                    attachmentName: attName,
+                  );
+                  Navigator.pop(ctx);
+                },
+                child: Text(provider.tr('Save Reminder', 'সেভ করুন')),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -589,7 +434,7 @@ class ScheduledTransactionsScreen extends StatelessWidget {
 }
 
 // =============================================================================
-// 3. CALCBOX (BUILT-IN FINANCIAL CALCULATOR)
+// CALCBOX FINANCIAL CALCULATOR WITH VISUAL CHART
 // =============================================================================
 class CalcBoxScreen extends StatefulWidget {
   const CalcBoxScreen({super.key});
@@ -599,83 +444,45 @@ class CalcBoxScreen extends StatefulWidget {
 }
 
 class _CalcBoxScreenState extends State<CalcBoxScreen> {
-  String _display = '0';
-  double _firstNum = 0;
-  String _operator = '';
-  bool _shouldReset = false;
-
-  void _onPress(String val) {
-    setState(() {
-      if (val == 'C') {
-        _display = '0';
-        _firstNum = 0;
-        _operator = '';
-      } else if (['+', '-', '×', '÷'].contains(val)) {
-        _firstNum = double.tryParse(_display) ?? 0;
-        _operator = val;
-        _shouldReset = true;
-      } else if (val == '=') {
-        final second = double.tryParse(_display) ?? 0;
-        double res = 0;
-        if (_operator == '+') res = _firstNum + second;
-        if (_operator == '-') res = _firstNum - second;
-        if (_operator == '×') res = _firstNum * second;
-        if (_operator == '÷') res = second != 0 ? _firstNum / second : 0;
-        _display = res.toStringAsFixed(res.truncateToDouble() == res ? 0 : 2);
-        _operator = '';
-        _shouldReset = true;
-      } else {
-        if (_display == '0' || _shouldReset) {
-          _display = val;
-          _shouldReset = false;
-        } else {
-          _display += val;
-        }
-      }
-    });
-  }
+  final _principalCtrl = TextEditingController(text: '50000');
+  final _rateCtrl = TextEditingController(text: '10');
+  final _yearsCtrl = TextEditingController(text: '2');
 
   @override
   Widget build(BuildContext context) {
-    final buttons = [
-      '7', '8', '9', '÷',
-      '4', '5', '6', '×',
-      '1', '2', '3', '-',
-      'C', '0', '=', '+',
-    ];
+    final p = context.watch<TransactionProvider>();
+    final double principal = double.tryParse(_principalCtrl.text) ?? 0.0;
+    final double rate = double.tryParse(_rateCtrl.text) ?? 0.0;
+    final double years = double.tryParse(_yearsCtrl.text) ?? 1.0;
+    final double profitInterest = principal * (rate / 100) * years;
+    final double totalMaturity = principal + profitInterest;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
-      appBar: AppBar(backgroundColor: const Color(0xFF121212), title: const Text('CalcBox')),
-      body: Column(
+      backgroundColor: const Color(0xFF0F172A),
+      appBar: AppBar(backgroundColor: const Color(0xFF0F172A), title: Text(p.tr('CalcBox Financial Planner', 'ক্যালকবক্স ফিন্যান্সিয়াল ক্যালকুলেটর'))),
+      body: ListView(
+        padding: const EdgeInsets.all(20),
         children: [
-          Expanded(
-            child: Container(
-              alignment: Alignment.bottomRight,
-              padding: const EdgeInsets.all(32),
-              child: Text(_display, style: const TextStyle(color: Colors.white, fontSize: 54, fontWeight: FontWeight.bold)),
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(color: const Color(0xFF1E293B), borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0xFF334155))),
+            child: RealisticDonutChart(
+              values: [principal > 0 ? principal : 1, profitInterest > 0 ? profitInterest : 0],
+              colors: const [Color(0xFF0EA5E9), Color(0xFF10B981)],
+              labels: [
+                '${p.tr("Principal", "আসল")} (৳${principal.toStringAsFixed(0)})',
+                '${p.tr("Return / Interest", "মুনাফা")} (৳${profitInterest.toStringAsFixed(0)})',
+              ],
+              centerTitle: p.tr('Maturity', 'মোট প্রাপ্য'),
+              centerValue: '৳${totalMaturity.toStringAsFixed(0)}',
             ),
           ),
-          GridView.builder(
-            shrinkWrap: true,
-            padding: const EdgeInsets.all(20),
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 4, crossAxisSpacing: 12, mainAxisSpacing: 12),
-            itemCount: buttons.length,
-            itemBuilder: (ctx, i) {
-              final b = buttons[i];
-              final isOp = ['÷', '×', '-', '+', '='].contains(b);
-              return ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: isOp ? Colors.tealAccent : const Color(0xFF1E1E1E),
-                  foregroundColor: isOp ? Colors.black : Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                ),
-                onPressed: () => _onPress(b),
-                child: Text(b, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-              );
-            },
-          ),
+          const SizedBox(height: 16),
+          TextField(controller: _principalCtrl, keyboardType: TextInputType.number, onChanged: (_) => setState(() {}), style: const TextStyle(color: Colors.white), decoration: InputDecoration(labelText: p.tr('Principal Amount (৳)', 'আসল টাকা (৳)'), filled: true, fillColor: const Color(0xFF1E293B), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none))),
+          const SizedBox(height: 12),
+          TextField(controller: _rateCtrl, keyboardType: TextInputType.number, onChanged: (_) => setState(() {}), style: const TextStyle(color: Colors.white), decoration: InputDecoration(labelText: p.tr('Annual Rate (%)', 'বার্ষিক হার (%)'), filled: true, fillColor: const Color(0xFF1E293B), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none))),
+          const SizedBox(height: 12),
+          TextField(controller: _yearsCtrl, keyboardType: TextInputType.number, onChanged: (_) => setState(() {}), style: const TextStyle(color: Colors.white), decoration: InputDecoration(labelText: p.tr('Duration (Years)', 'মেয়াদ (বছর)'), filled: true, fillColor: const Color(0xFF1E293B), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none))),
         ],
       ),
     );
