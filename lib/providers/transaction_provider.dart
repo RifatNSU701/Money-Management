@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
-import 'package:image_picker/image_picker.dart'
+import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
@@ -374,37 +374,38 @@ class BusinessTxModel {
 // =============================================================================
 // UNIVERSAL RECEIPT / MEMO ATTACHMENT PICKER & VIEWER (PDF, JPG, JPEG, PNG)
 // =============================================================================
-static Future pickReceiptOrMemo(BuildContext context) async {
-try {
-final picker = ImagePicker();
-final XFile? file = await picker.pickImage(
-source: ImageSource.gallery,
-maxWidth: 1200,
-imageQuality: 85,
-);
+class AttachmentHelper {
+  static Future pickReceiptOrMemo(BuildContext context) async {
+    try {
+      final picker = ImagePicker();
+      final XFile? file = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1200,
+        imageQuality: 85,
+      );
 
-if (file == null) return null;
-Uint8List bytes = await file.readAsBytes();
+      if (file == null) return null;
+      Uint8List bytes = await file.readAsBytes();
 
-final decoded = img.decodeImage(bytes);
-if (decoded != null) {
-final resized = decoded.width > 900 ? img.copyResize(decoded, width: 900) : decoded;
-bytes = Uint8List.fromList(img.encodeJpg(resized, quality: 82));
-}
+      final decoded = img.decodeImage(bytes);
+      if (decoded != null) {
+        final resized = decoded.width > 900 ? img.copyResize(decoded, width: 900) : decoded;
+        bytes = Uint8List.fromList(img.encodeJpg(resized, quality: 82));
+      }
 
-return {
-'base64': base64Encode(bytes),
-'name': file.name,
-};
-} catch (e) {
-if (context.mounted) {
-ScaffoldMessenger.of(context).showSnackBar(
-SnackBar(content: Text('Could not attach file: $e')),
-);
-}
-return null;
-}
-}
+      return {
+        'base64': base64Encode(bytes),
+        'name': file.name,
+      };
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not attach file: $e')),
+        );
+      }
+      return null;
+    }
+  }
 
   static void viewAttachment(BuildContext context, String base64Data, String fileName) {
     if (base64Data.isEmpty) return;
