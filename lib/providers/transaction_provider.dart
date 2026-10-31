@@ -1,11 +1,16 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
+import 'dart:typed_data';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:image/image.dart' as img;
+import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // =============================================================================
-// PERSONAL & WALLET MODELS
+// PERSONAL & WALLET MODELS (WITH PDF / IMAGE RECEIPT ATTACHMENTS)
 // =============================================================================
 class TransactionModel {
   final String id;
@@ -16,6 +21,8 @@ class TransactionModel {
   final String date;
   final int iconCode;
   final int colorValue;
+  final String attachmentBase64;
+  final String attachmentName;
 
   TransactionModel({
     required this.id,
@@ -26,12 +33,15 @@ class TransactionModel {
     required this.date,
     required this.iconCode,
     required this.colorValue,
+    this.attachmentBase64 = '',
+    this.attachmentName = '',
   });
 
+  bool get hasAttachment => attachmentBase64.isNotEmpty;
   IconData get icon => isExpense ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded;
   Color get color => Color(colorValue);
 
-  Map<String, dynamic> toJson() => {
+  Map toJson() => {
     'id': id,
     'title': title,
     'subtitle': subtitle,
@@ -40,17 +50,21 @@ class TransactionModel {
     'date': date,
     'iconCode': iconCode,
     'colorValue': colorValue,
+    'attachmentBase64': attachmentBase64,
+    'attachmentName': attachmentName,
   };
 
-  factory TransactionModel.fromJson(Map<String, dynamic> json) => TransactionModel(
-    id: json['id'],
-    title: json['title'],
-    subtitle: json['subtitle'],
-    amount: (json['amount'] as num).toDouble(),
-    isExpense: json['isExpense'],
-    date: json['date'],
-    iconCode: json['iconCode'],
-    colorValue: json['colorValue'],
+  factory TransactionModel.fromJson(Map json) => TransactionModel(
+    id: json['id'].toString(),
+    title: json['title']?.toString() ?? '',
+    subtitle: json['subtitle']?.toString() ?? '',
+    amount: ((json['amount'] ?? 0) as num).toDouble(),
+    isExpense: json['isExpense'] == true,
+    date: json['date']?.toString() ?? '',
+    iconCode: ((json['iconCode'] ?? 0) as num).toInt(),
+    colorValue: ((json['colorValue'] ?? 0xFF10B981) as num).toInt(),
+    attachmentBase64: json['attachmentBase64']?.toString() ?? '',
+    attachmentName: json['attachmentName']?.toString() ?? '',
   );
 }
 
@@ -68,16 +82,16 @@ class GroupMemberModel {
     required this.paidAmount,
   });
 
-  Map<String, dynamic> toJson() => {
+  Map toJson() => {
     'id': id,
     'name': name,
     'paidAmount': paidAmount,
   };
 
-  factory GroupMemberModel.fromJson(Map<String, dynamic> json) => GroupMemberModel(
-    id: json['id'],
-    name: json['name'],
-    paidAmount: (json['paidAmount'] as num).toDouble(),
+  factory GroupMemberModel.fromJson(Map json) => GroupMemberModel(
+    id: json['id'].toString(),
+    name: json['name']?.toString() ?? '',
+    paidAmount: ((json['paidAmount'] ?? 0) as num).toDouble(),
   );
 }
 
@@ -88,6 +102,8 @@ class GroupExpenseModel {
   final String paidByMemberId;
   final String paidByMemberName;
   final String date;
+  final String attachmentBase64;
+  final String attachmentName;
 
   GroupExpenseModel({
     required this.id,
@@ -96,24 +112,32 @@ class GroupExpenseModel {
     required this.paidByMemberId,
     required this.paidByMemberName,
     required this.date,
+    this.attachmentBase64 = '',
+    this.attachmentName = '',
   });
 
-  Map<String, dynamic> toJson() => {
+  bool get hasAttachment => attachmentBase64.isNotEmpty;
+
+  Map toJson() => {
     'id': id,
     'title': title,
     'amount': amount,
     'paidByMemberId': paidByMemberId,
     'paidByMemberName': paidByMemberName,
     'date': date,
+    'attachmentBase64': attachmentBase64,
+    'attachmentName': attachmentName,
   };
 
-  factory GroupExpenseModel.fromJson(Map<String, dynamic> json) => GroupExpenseModel(
-    id: json['id'],
-    title: json['title'],
-    amount: (json['amount'] as num).toDouble(),
-    paidByMemberId: json['paidByMemberId'] ?? 'pool',
-    paidByMemberName: json['paidByMemberName'] ?? 'Group Pool',
-    date: json['date'] ?? '',
+  factory GroupExpenseModel.fromJson(Map json) => GroupExpenseModel(
+    id: json['id'].toString(),
+    title: json['title']?.toString() ?? '',
+    amount: ((json['amount'] ?? 0) as num).toDouble(),
+    paidByMemberId: json['paidByMemberId']?.toString() ?? 'pool',
+    paidByMemberName: json['paidByMemberName']?.toString() ?? 'Group Pool',
+    date: json['date']?.toString() ?? '',
+    attachmentBase64: json['attachmentBase64']?.toString() ?? '',
+    attachmentName: json['attachmentName']?.toString() ?? '',
   );
 }
 
@@ -143,7 +167,7 @@ class GroupModel {
   double get poolBalanceLeft => totalCollected - totalSpent;
   double get budgetRemaining => totalBudget - totalSpent;
 
-  Map<String, dynamic> toJson() => {
+  Map toJson() => {
     'id': id,
     'name': name,
     'totalBudget': totalBudget,
@@ -152,17 +176,17 @@ class GroupModel {
     'expenses': expenses.map((e) => e.toJson()).toList(),
   };
 
-  factory GroupModel.fromJson(Map<String, dynamic> json) {
+  factory GroupModel.fromJson(Map json) {
     return GroupModel(
-      id: json['id'],
-      name: json['name'] ?? 'Group Plan',
+      id: json['id'].toString(),
+      name: json['name']?.toString() ?? 'Group Plan',
       totalBudget: ((json['totalBudget'] ?? json['amount'] ?? 0) as num).toDouble(),
-      createdAt: json['createdAt'] ?? 'Active Plan',
+      createdAt: json['createdAt']?.toString() ?? 'Active Plan',
       members: json['members'] != null
-          ? (json['members'] as List).map((m) => GroupMemberModel.fromJson(m)).toList()
+          ? (json['members'] as List).map((m) => GroupMemberModel.fromJson(Map.from(m as Map))).toList()
           : [],
       expenses: json['expenses'] != null
-          ? (json['expenses'] as List).map((e) => GroupExpenseModel.fromJson(e)).toList()
+          ? (json['expenses'] as List).map((e) => GroupExpenseModel.fromJson(Map.from(e as Map))).toList()
           : [],
     );
   }
@@ -185,7 +209,7 @@ class WalletModel {
     required this.balance,
   });
 
-  Map<String, dynamic> toJson() => {
+  Map toJson() => {
     'id': id,
     'name': name,
     'type': type,
@@ -194,18 +218,18 @@ class WalletModel {
     'balance': balance,
   };
 
-  factory WalletModel.fromJson(Map<String, dynamic> json) {
-    String rawType = json['type'] ?? 'Cash';
+  factory WalletModel.fromJson(Map json) {
+    String rawType = json['type']?.toString() ?? 'Cash';
     if (rawType == 'Mobile') rawType = 'Mobile Banking';
     if (rawType == 'Bank') rawType = 'Bank Account';
 
     return WalletModel(
-      id: json['id'],
-      name: json['name'] ?? 'Account',
+      id: json['id'].toString(),
+      name: json['name']?.toString() ?? 'Account',
       type: rawType,
-      providerName: json['providerName'] ?? (json['name'] ?? 'Cash'),
-      accountNumber: json['accountNumber'] ?? '',
-      balance: (json['balance'] as num).toDouble(),
+      providerName: json['providerName']?.toString() ?? (json['name']?.toString() ?? 'Cash'),
+      accountNumber: json['accountNumber']?.toString() ?? '',
+      balance: ((json['balance'] ?? 0) as num).toDouble(),
     );
   }
 }
@@ -216,6 +240,8 @@ class ScheduledTxModel {
   final double amount;
   final String dueDate;
   final bool isExpense;
+  final String attachmentBase64;
+  final String attachmentName;
 
   ScheduledTxModel({
     required this.id,
@@ -223,22 +249,30 @@ class ScheduledTxModel {
     required this.amount,
     required this.dueDate,
     required this.isExpense,
+    this.attachmentBase64 = '',
+    this.attachmentName = '',
   });
 
-  Map<String, dynamic> toJson() => {
+  bool get hasAttachment => attachmentBase64.isNotEmpty;
+
+  Map toJson() => {
     'id': id,
     'title': title,
     'amount': amount,
     'dueDate': dueDate,
     'isExpense': isExpense,
+    'attachmentBase64': attachmentBase64,
+    'attachmentName': attachmentName,
   };
 
-  factory ScheduledTxModel.fromJson(Map<String, dynamic> json) => ScheduledTxModel(
-    id: json['id'],
-    title: json['title'],
-    amount: (json['amount'] as num).toDouble(),
-    dueDate: json['dueDate'],
+  factory ScheduledTxModel.fromJson(Map json) => ScheduledTxModel(
+    id: json['id'].toString(),
+    title: json['title']?.toString() ?? '',
+    amount: ((json['amount'] ?? 0) as num).toDouble(),
+    dueDate: json['dueDate']?.toString() ?? '',
     isExpense: json['isExpense'] ?? true,
+    attachmentBase64: json['attachmentBase64']?.toString() ?? '',
+    attachmentName: json['attachmentName']?.toString() ?? '',
   );
 }
 
@@ -253,13 +287,13 @@ class ProductModel {
 
   ProductModel({required this.id, required this.name, required this.price, required this.stock});
 
-  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'price': price, 'stock': stock};
+  Map toJson() => {'id': id, 'name': name, 'price': price, 'stock': stock};
 
-  factory ProductModel.fromJson(Map<String, dynamic> json) => ProductModel(
-    id: json['id'],
-    name: json['name'],
-    price: (json['price'] as num).toDouble(),
-    stock: json['stock'],
+  factory ProductModel.fromJson(Map json) => ProductModel(
+    id: json['id'].toString(),
+    name: json['name']?.toString() ?? '',
+    price: ((json['price'] ?? 0) as num).toDouble(),
+    stock: ((json['stock'] ?? 0) as num).toInt(),
   );
 }
 
@@ -278,7 +312,7 @@ class PartyModel {
     required this.dueAmount,
   });
 
-  Map<String, dynamic> toJson() => {
+  Map toJson() => {
     'id': id,
     'name': name,
     'phone': phone,
@@ -286,12 +320,12 @@ class PartyModel {
     'dueAmount': dueAmount,
   };
 
-  factory PartyModel.fromJson(Map<String, dynamic> json) => PartyModel(
-    id: json['id'],
-    name: json['name'],
-    phone: json['phone'] ?? '',
-    isCustomer: json['isCustomer'],
-    dueAmount: (json['dueAmount'] as num).toDouble(),
+  factory PartyModel.fromJson(Map json) => PartyModel(
+    id: json['id'].toString(),
+    name: json['name']?.toString() ?? '',
+    phone: json['phone']?.toString() ?? '',
+    isCustomer: json['isCustomer'] ?? true,
+    dueAmount: ((json['dueAmount'] ?? 0) as num).toDouble(),
   );
 }
 
@@ -301,40 +335,291 @@ class BusinessTxModel {
   final String type;
   final double amount;
   final String date;
+  final String attachmentBase64;
+  final String attachmentName;
 
-  BusinessTxModel({required this.id, required this.title, required this.type, required this.amount, required this.date});
+  BusinessTxModel({
+    required this.id,
+    required this.title,
+    required this.type,
+    required this.amount,
+    required this.date,
+    this.attachmentBase64 = '',
+    this.attachmentName = '',
+  });
 
-  Map<String, dynamic> toJson() => {'id': id, 'title': title, 'type': type, 'amount': amount, 'date': date};
+  bool get hasAttachment => attachmentBase64.isNotEmpty;
 
-  factory BusinessTxModel.fromJson(Map<String, dynamic> json) => BusinessTxModel(
-    id: json['id'],
-    title: json['title'],
-    type: json['type'],
-    amount: (json['amount'] as num).toDouble(),
-    date: json['date'],
+  Map toJson() => {
+    'id': id,
+    'title': title,
+    'type': type,
+    'amount': amount,
+    'date': date,
+    'attachmentBase64': attachmentBase64,
+    'attachmentName': attachmentName,
+  };
+
+  factory BusinessTxModel.fromJson(Map json) => BusinessTxModel(
+    id: json['id'].toString(),
+    title: json['title']?.toString() ?? '',
+    type: json['type']?.toString() ?? 'Sale',
+    amount: ((json['amount'] ?? 0) as num).toDouble(),
+    date: json['date']?.toString() ?? '',
+    attachmentBase64: json['attachmentBase64']?.toString() ?? '',
+    attachmentName: json['attachmentName']?.toString() ?? '',
   );
 }
 
 // =============================================================================
-// UNIFIED PROVIDER (CLOUD DATABASE + MULTI-USER + RICH USER PROFILE)
+// UNIVERSAL RECEIPT / MEMO ATTACHMENT PICKER & VIEWER (PDF, JPG, JPEG, PNG)
+// =============================================================================
+class AttachmentHelper {
+  static Future pickReceiptOrMemo(BuildContext context) async {
+    try {
+      final FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+        withData: true,
+      );
+
+      if (result == null || result.files.isEmpty) return null;
+      final PlatformFile file = result.files.first;
+      Uint8List? bytes = file.bytes;
+      if (bytes == null) return null;
+
+      final String ext = (file.extension ?? '').toLowerCase();
+      if (ext == 'jpg' || ext == 'jpeg' || ext == 'png') {
+        final decoded = img.decodeImage(bytes);
+        if (decoded != null) {
+          final resized = decoded.width > 900 ? img.copyResize(decoded, width: 900) : decoded;
+          bytes = Uint8List.fromList(img.encodeJpg(resized, quality: 82));
+        }
+      }
+
+      return {
+        'base64': base64Encode(bytes),
+        'name': file.name,
+      };
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not attach file: $e')),
+        );
+      }
+      return null;
+    }
+  }
+
+  static void viewAttachment(BuildContext context, String base64Data, String fileName) {
+    if (base64Data.isEmpty) return;
+    final Uint8List bytes = base64Decode(base64Data);
+    final bool isPdf = fileName.toLowerCase().endsWith('.pdf');
+
+    if (isPdf) {
+      Printing.sharePdf(bytes: bytes, filename: fileName.isEmpty ? 'Document.pdf' : fileName);
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460, maxHeight: 600),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        fileName.isEmpty ? 'Attached Memo / Receipt' : fileName,
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white70),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+                const Divider(color: Colors.white12),
+                Expanded(
+                  child: InteractiveViewer(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.memory(bytes, fit: BoxFit.contain),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0EA5E9),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: () => Printing.sharePdf(
+                      bytes: bytes,
+                      filename: fileName.isEmpty ? 'Receipt.jpg' : fileName,
+                    ),
+                    icon: const Icon(Icons.download_rounded, size: 18),
+                    label: const Text('Download / Share Receipt', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// REUSABLE REALISTIC CHARTS FOR ALL SCREENS
+// =============================================================================
+class RealisticDonutChart extends StatelessWidget {
+  final List<double> values;
+  final List<Color> colors;
+  final List<String> labels;
+  final String centerTitle;
+  final String centerValue;
+
+  const RealisticDonutChart({
+    super.key,
+    required this.values,
+    required this.colors,
+    required this.labels,
+    required this.centerTitle,
+    required this.centerValue,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final double total = values.fold(0, (s, v) => s + v);
+    return Row(
+      children: [
+        SizedBox(
+          width: 130,
+          height: 130,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              CustomPaint(
+                size: const Size(130, 130),
+                painter: _DonutPainter(values: values, colors: colors),
+              ),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(centerTitle, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 2),
+                  Text(centerValue, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 20),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: List.generate(values.length, (i) {
+              final double pct = total > 0 ? (values[i] / total * 100) : 0.0;
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4.0),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(color: colors[i % colors.length], borderRadius: BorderRadius.circular(3)),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        labels[i],
+                        style: const TextStyle(color: Color(0xFFE2E8F0), fontSize: 12, fontWeight: FontWeight.w500),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Text(
+                      '${pct.toStringAsFixed(0)}%',
+                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DonutPainter extends CustomPainter {
+  final List<double> values;
+  final List<Color> colors;
+
+  _DonutPainter({required this.values, required this.colors});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double total = values.fold(0, (s, v) => s + v);
+    final Offset center = Offset(size.width / 2, size.height / 2);
+    final double radius = math.min(size.width, size.height) / 2 - 10;
+    final Paint paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 16
+      ..strokeCap = StrokeCap.butt;
+
+    if (total == 0 || total.isNegative) {
+      paint.color = const Color(0xFF334155);
+      canvas.drawCircle(center, radius, paint);
+      return;
+    }
+
+    double startAngle = -math.pi / 2;
+    for (final i in Iterable.generate(values.length)) {
+      if (values[i] == 0 || values[i].isNegative) continue;
+      final double sweep = (values[i] / total) * 2 * math.pi;
+      paint.color = colors[i % colors.length];
+      canvas.drawArc(Rect.fromCircle(center: center, radius: radius), startAngle, sweep - 0.03, false, paint);
+      startAngle += sweep;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+// =============================================================================
+// UNIFIED PROVIDER (CLOUD DATABASE + BENGALI/ENGLISH + ATTACHMENTS)
 // =============================================================================
 class TransactionProvider with ChangeNotifier {
-  // Personal State (100% Empty by default for new accounts)
   List<TransactionModel> _transactions = [];
   Map<String, double> _budgets = {};
-  List<String> _expenseCategories = ['Food & Dining', 'Transportation', 'Shopping', 'Entertainment'];
-  List<String> _incomeCategories = ['Salary', 'Freelance / Projects', 'Investments', 'Gifts'];
+  List<String> _expenseCategories = ['Food & Dining', 'Transportation', 'Shopping', 'Utilities & Rent'];
+  List<String> _incomeCategories = ['Monthly Salary', 'Freelance Revenue', 'Investments', 'Business Dividend'];
   List<GroupModel> _groups = [];
   List<String> _savedMembers = [];
   List<WalletModel> _wallets = [];
   List<ScheduledTxModel> _scheduledTxs = [];
 
-  // Business State (100% Empty by default for new accounts)
   List<ProductModel> _products = [];
   List<PartyModel> _parties = [];
   List<BusinessTxModel> _businessTxs = [];
 
-  // Rich User Profile State
   String _cloudEmail = '';
   String _userName = 'FinBlend User';
   String _userPhone = '';
@@ -346,12 +631,11 @@ class TransactionProvider with ChangeNotifier {
   String _userPhotoBase64 = '';
   String _passwordHash = '';
 
-  // Appearance, Notifications & Permissions State
   bool _isDarkMode = true;
+  String _language = 'en';
   bool _notificationsEnabled = true;
   bool _permissionsGranted = true;
 
-  // Cloud Sync State
   String _customCloudUrl = '';
   bool _isSyncing = false;
   String _lastSyncedAt = 'Not synced yet';
@@ -369,7 +653,6 @@ class TransactionProvider with ChangeNotifier {
     super.dispose();
   }
 
-  // Getters
   List<TransactionModel> get transactions => _transactions.reversed.toList();
   Map<String, double> get budgets => _budgets;
   List<String> get expenseCategories => _expenseCategories;
@@ -379,7 +662,6 @@ class TransactionProvider with ChangeNotifier {
   List<WalletModel> get wallets => _wallets;
   List<ScheduledTxModel> get scheduledTxs => _scheduledTxs;
 
-  // User Profile Getters
   String get cloudEmail => _cloudEmail.isEmpty ? 'Not signed in' : _cloudEmail;
   String get userName => _userName;
   String get userPhone => _userPhone;
@@ -391,6 +673,8 @@ class TransactionProvider with ChangeNotifier {
   String get userPhotoBase64 => _userPhotoBase64;
 
   bool get isDarkMode => _isDarkMode;
+  String get language => _language;
+  bool get isBengali => _language == 'bn';
   bool get notificationsEnabled => _notificationsEnabled;
   bool get permissionsGranted => _permissionsGranted;
 
@@ -404,7 +688,6 @@ class TransactionProvider with ChangeNotifier {
   double get totalBalance => totalIncome - totalExpense;
   double get totalWalletsBalance => _wallets.fold(0, (sum, w) => sum + w.balance);
 
-  // Business Getters
   List<ProductModel> get products => _products;
   List<PartyModel> get parties => _parties;
   List<BusinessTxModel> get businessTxs => _businessTxs.reversed.toList();
@@ -415,7 +698,23 @@ class TransactionProvider with ChangeNotifier {
   double get netProfit => totalSales - totalPurchases - totalBizExpenses;
   double get totalCustomerDue => _parties.where((p) => p.isCustomer).fold(0, (s, p) => s + p.dueAmount);
   int get totalCustomersCount => _parties.where((p) => p.isCustomer).length;
-  int get lowStockCount => _products.where((p) => p.stock <= 5).length;
+  int get lowStockCount => _products.where((p) => p.stock.clamp(0, 5) == p.stock).length;
+
+  void setLanguage(String langCode) {
+    _language = langCode;
+    _saveData();
+    notifyListeners();
+  }
+
+  void toggleLanguage() {
+    _language = _language == 'en' ? 'bn' : 'en';
+    _saveData();
+    notifyListeners();
+  }
+
+  String tr(String enText, String bnText) {
+    return _language == 'bn' ? bnText : enText;
+  }
 
   String _generateTimestamp() {
     final now = DateTime.now();
@@ -435,12 +734,11 @@ class TransactionProvider with ChangeNotifier {
     return base64Encode(utf8.encode('fb_salt_${password.trim()}'));
   }
 
-  // Completely empty state for new user accounts
   void _resetToCleanAccount() {
     _transactions = [];
     _budgets = {};
-    _expenseCategories = ['Food & Dining', 'Transportation', 'Shopping', 'Entertainment'];
-    _incomeCategories = ['Salary', 'Freelance / Projects', 'Investments', 'Gifts'];
+    _expenseCategories = ['Food & Dining', 'Transportation', 'Shopping', 'Utilities & Rent'];
+    _incomeCategories = ['Monthly Salary', 'Freelance Revenue', 'Investments', 'Business Dividend'];
     _groups = [];
     _savedMembers = [];
     _wallets = [];
@@ -458,7 +756,7 @@ class TransactionProvider with ChangeNotifier {
     _lastUpdatedTimestamp = DateTime.now().millisecondsSinceEpoch;
   }
 
-  Map<String, dynamic> exportFullStateMap() {
+  Map exportFullStateMap() {
     if (_lastUpdatedTimestamp == 0) {
       _lastUpdatedTimestamp = DateTime.now().millisecondsSinceEpoch;
     }
@@ -474,6 +772,7 @@ class TransactionProvider with ChangeNotifier {
       'userAddress': _userAddress,
       'userPhotoBase64': _userPhotoBase64,
       'passwordHash': _passwordHash,
+      'language': _language,
       'tx_data': _transactions.map((t) => t.toJson()).toList(),
       'bdg_data': _budgets,
       'exp_cat_data': _expenseCategories,
@@ -489,7 +788,7 @@ class TransactionProvider with ChangeNotifier {
     };
   }
 
-  void _applyStateMap(Map<String, dynamic> map) {
+  void _applyStateMap(Map map) {
     _lastUpdatedTimestamp = (map['updatedAt'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch;
     if (map['userName'] != null) _userName = map['userName'].toString();
     if (map['userPhone'] != null) _userPhone = map['userPhone'].toString();
@@ -499,35 +798,40 @@ class TransactionProvider with ChangeNotifier {
     if (map['userOrganization'] != null) _userOrganization = map['userOrganization'].toString();
     if (map['userAddress'] != null) _userAddress = map['userAddress'].toString();
     if (map['userPhotoBase64'] != null) _userPhotoBase64 = map['userPhotoBase64'].toString();
+    if (map['language'] != null) _language = map['language'].toString();
     if (map['passwordHash'] != null && map['passwordHash'].toString().isNotEmpty) {
       _passwordHash = map['passwordHash'].toString();
     }
     if (map['tx_data'] != null) {
-      _transactions = (map['tx_data'] as List).map((i) => TransactionModel.fromJson(Map<String, dynamic>.from(i))).toList();
+      _transactions = (map['tx_data'] as List).map((i) => TransactionModel.fromJson(Map.from(i as Map))).toList();
     }
     if (map['bdg_data'] != null) {
-      _budgets = Map<String, double>.from((map['bdg_data'] as Map).map((k, v) => MapEntry(k.toString(), (v as num).toDouble())));
+      final rawBdg = Map.from(map['bdg_data'] as Map);
+      _budgets = {};
+      rawBdg.forEach((k, v) {
+        _budgets[k.toString()] = (v as num).toDouble();
+      });
     }
-    if (map['exp_cat_data'] != null) _expenseCategories = List<String>.from(map['exp_cat_data']);
-    if (map['inc_cat_data'] != null) _incomeCategories = List<String>.from(map['inc_cat_data']);
+    if (map['exp_cat_data'] != null) _expenseCategories = List<String>.from(map['exp_cat_data'] as List);
+    if (map['inc_cat_data'] != null) _incomeCategories = List<String>.from(map['inc_cat_data'] as List);
     if (map['grp_data'] != null) {
-      _groups = (map['grp_data'] as List).map((i) => GroupModel.fromJson(Map<String, dynamic>.from(i))).toList();
+      _groups = (map['grp_data'] as List).map((i) => GroupModel.fromJson(Map.from(i as Map))).toList();
     }
-    if (map['saved_members_data'] != null) _savedMembers = List<String>.from(map['saved_members_data']);
+    if (map['saved_members_data'] != null) _savedMembers = List<String>.from(map['saved_members_data'] as List);
     if (map['wal_data'] != null) {
-      _wallets = (map['wal_data'] as List).map((i) => WalletModel.fromJson(Map<String, dynamic>.from(i))).toList();
+      _wallets = (map['wal_data'] as List).map((i) => WalletModel.fromJson(Map.from(i as Map))).toList();
     }
     if (map['sch_data'] != null) {
-      _scheduledTxs = (map['sch_data'] as List).map((i) => ScheduledTxModel.fromJson(Map<String, dynamic>.from(i))).toList();
+      _scheduledTxs = (map['sch_data'] as List).map((i) => ScheduledTxModel.fromJson(Map.from(i as Map))).toList();
     }
     if (map['biz_prod_data'] != null) {
-      _products = (map['biz_prod_data'] as List).map((i) => ProductModel.fromJson(Map<String, dynamic>.from(i))).toList();
+      _products = (map['biz_prod_data'] as List).map((i) => ProductModel.fromJson(Map.from(i as Map))).toList();
     }
     if (map['biz_party_data'] != null) {
-      _parties = (map['biz_party_data'] as List).map((i) => PartyModel.fromJson(Map<String, dynamic>.from(i))).toList();
+      _parties = (map['biz_party_data'] as List).map((i) => PartyModel.fromJson(Map.from(i as Map))).toList();
     }
     if (map['biz_tx_data'] != null) {
-      _businessTxs = (map['biz_tx_data'] as List).map((i) => BusinessTxModel.fromJson(Map<String, dynamic>.from(i))).toList();
+      _businessTxs = (map['biz_tx_data'] as List).map((i) => BusinessTxModel.fromJson(Map.from(i as Map))).toList();
     }
     if (map['pref_dark_mode'] != null) _isDarkMode = map['pref_dark_mode'] as bool;
   }
@@ -538,6 +842,7 @@ class TransactionProvider with ChangeNotifier {
       _customCloudUrl = prefs.getString('custom_cloud_url') ?? '';
       _lastSyncedAt = prefs.getString('last_synced_at') ?? 'Not synced yet';
       if (prefs.containsKey('pref_dark_mode')) _isDarkMode = prefs.getBool('pref_dark_mode') ?? true;
+      if (prefs.containsKey('pref_lang')) _language = prefs.getString('pref_lang') ?? 'en';
       if (prefs.containsKey('pref_notif')) _notificationsEnabled = prefs.getBool('pref_notif') ?? true;
       if (prefs.containsKey('pref_perm')) _permissionsGranted = prefs.getBool('pref_perm') ?? true;
 
@@ -548,7 +853,7 @@ class TransactionProvider with ChangeNotifier {
       if (isLogged && _cloudEmail.isNotEmpty) {
         final localKey = 'account_cache_${_getCloudChannelKey(_cloudEmail)}';
         if (prefs.containsKey(localKey)) {
-          final cachedMap = jsonDecode(prefs.getString(localKey)!) as Map<String, dynamic>;
+          final cachedMap = jsonDecode(prefs.getString(localKey)!) as Map;
           _applyStateMap(cachedMap);
         }
         _startAutoSyncTimer();
@@ -574,6 +879,7 @@ class TransactionProvider with ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
 
     await prefs.setBool('pref_dark_mode', _isDarkMode);
+    await prefs.setString('pref_lang', _language);
     await prefs.setBool('pref_notif', _notificationsEnabled);
     await prefs.setBool('pref_perm', _permissionsGranted);
     await prefs.setString('user_name', _userName);
@@ -589,7 +895,6 @@ class TransactionProvider with ChangeNotifier {
     }
   }
 
-  // --- UPDATE RICH USER PROFILE ---
   Future<void> updateUserProfile({
     required String name,
     required String email,
@@ -618,17 +923,22 @@ class TransactionProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // --- CLOUD ACCOUNT AUTHENTICATION ---
-  Future<Map<String, dynamic>> authenticateCloudAccount({
+  // ===========================================================================
+  // PROFESSIONAL CLOUD REGISTRATION & AUTHENTICATION
+  // ===========================================================================
+  Future authenticateCloudAccount({
     required String name,
     required String email,
     required String password,
     required bool isSignUp,
+    String phone = '',
+    String occupation = '',
+    String address = '',
   }) async {
     final cleanEmail = email.trim().toLowerCase();
     final passHash = _hashPassword(password);
     _isSyncing = true;
-    _cloudStatus = 'Connecting to Cloud...';
+    _cloudStatus = tr('Connecting to Cloud...', 'ক্লাউডে সংযুক্ত হচ্ছে...');
     notifyListeners();
 
     final prefs = await SharedPreferences.getInstance();
@@ -644,26 +954,20 @@ class TransactionProvider with ChangeNotifier {
         notifyListeners();
         return {
           'success': false,
-          'message': 'An account with this email already exists in the Cloud. Please Sign In instead.',
+          'message': tr(
+            'An account with this email already exists in the Cloud. Please Sign In instead.',
+            'এই ইমেইল দিয়ে ইতিমধ্যে একটি অ্যাকাউন্ট রয়েছে। অনুগ্রহ করে সাইন ইন করুন।',
+          ),
         };
       }
 
-      // Start 100% clean & empty for a new signup
       _resetToCleanAccount();
       _cloudEmail = cleanEmail;
       _userName = name.trim().isEmpty ? cleanEmail.split('@').first : name.trim();
+      _userPhone = phone.trim();
+      _userOccupation = occupation.trim();
+      _userAddress = address.trim();
       _passwordHash = passHash;
-
-      // Clear any legacy shared_preferences keys on this device so nothing leaks into the new account
-      await prefs.remove('tx_data');
-      await prefs.remove('bdg_data');
-      await prefs.remove('grp_data');
-      await prefs.remove('saved_members_data');
-      await prefs.remove('wal_data');
-      await prefs.remove('sch_data');
-      await prefs.remove('biz_prod_data');
-      await prefs.remove('biz_party_data');
-      await prefs.remove('biz_tx_data');
 
       await prefs.setBool('is_logged_in', true);
       await prefs.setString('user_name', _userName);
@@ -673,7 +977,10 @@ class TransactionProvider with ChangeNotifier {
       await pushToCloud(silent: false);
       _startAutoSyncTimer();
 
-      return {'success': true, 'message': 'Clean Cloud account created and synced!'};
+      return {
+        'success': true,
+        'message': tr('Account registered and synced to Cloud!', 'অ্যাকাউন্ট সফলভাবে তৈরি ও ক্লাউডে সিঙ্ক হয়েছে!'),
+      };
     } else {
       if (remoteMap != null) {
         final cloudPassHash = remoteMap['passwordHash']?.toString() ?? '';
@@ -683,7 +990,7 @@ class TransactionProvider with ChangeNotifier {
           notifyListeners();
           return {
             'success': false,
-            'message': 'Incorrect password for this Cloud account.',
+            'message': tr('Incorrect password for this account.', 'ভুল পাসওয়ার্ড প্রদান করা হয়েছে।'),
           };
         }
 
@@ -699,21 +1006,21 @@ class TransactionProvider with ChangeNotifier {
 
         await _saveData(syncCloud: false);
         _lastSyncedAt = _generateTimestamp();
-        _cloudStatus = 'Synced with Cloud ✓';
+        _cloudStatus = 'Synced ✓';
         _isSyncing = false;
         _startAutoSyncTimer();
         notifyListeners();
 
-        return {'success': true, 'message': 'Signed in and loaded your Cloud account!'};
+        return {'success': true, 'message': tr('Signed in successfully!', 'সফলভাবে সাইন ইন হয়েছে!')};
       } else {
         final localKey = 'account_cache_${_getCloudChannelKey(cleanEmail)}';
         if (prefs.containsKey(localKey)) {
-          final cachedMap = jsonDecode(prefs.getString(localKey)!) as Map<String, dynamic>;
+          final cachedMap = jsonDecode(prefs.getString(localKey)!) as Map;
           final cachedPass = cachedMap['passwordHash']?.toString() ?? '';
           if (cachedPass.isNotEmpty && cachedPass != passHash) {
             _isSyncing = false;
             notifyListeners();
-            return {'success': false, 'message': 'Incorrect password.'};
+            return {'success': false, 'message': tr('Incorrect password.', 'ভুল পাসওয়ার্ড।')};
           }
           _resetToCleanAccount();
           _cloudEmail = cleanEmail;
@@ -734,7 +1041,7 @@ class TransactionProvider with ChangeNotifier {
         await pushToCloud(silent: false);
         _startAutoSyncTimer();
 
-        return {'success': true, 'message': 'Signed in and synced to Cloud!'};
+        return {'success': true, 'message': tr('Signed in and synced!', 'সাইন ইন ও সিঙ্ক সম্পন্ন হয়েছে!')};
       }
     }
   }
@@ -772,7 +1079,7 @@ class TransactionProvider with ChangeNotifier {
     }
   }
 
-  Future<Map<String, dynamic>?> _fetchRemoteCloudMap(String email) async {
+  Future _fetchRemoteCloudMap(String email) async {
     try {
       final channel = _getCloudChannelKey(email);
       String? base64Payload;
@@ -793,12 +1100,12 @@ class TransactionProvider with ChangeNotifier {
 
         if (res.statusCode == 200 && res.body.trim().isNotEmpty) {
           final lines = res.body.trim().split('\n');
-          Map<String, dynamic>? latestMsg;
+          Map? latestMsg;
 
           for (var line in lines) {
             if (line.trim().isEmpty) continue;
             final decodedLine = jsonDecode(line);
-            if (decodedLine is Map<String, dynamic> && decodedLine['event'] == 'message') {
+            if (decodedLine is Map && decodedLine['event'] == 'message') {
               latestMsg = decodedLine;
             }
           }
@@ -820,7 +1127,7 @@ class TransactionProvider with ChangeNotifier {
 
       if (base64Payload != null && base64Payload.isNotEmpty) {
         final decodedJsonStr = utf8.decode(base64Decode(base64Payload));
-        return jsonDecode(decodedJsonStr) as Map<String, dynamic>;
+        return jsonDecode(decodedJsonStr) as Map;
       }
     } catch (e) {
       debugPrint('Cloud fetch error: $e');
@@ -831,7 +1138,7 @@ class TransactionProvider with ChangeNotifier {
   Future<bool> pushToCloud({bool silent = false}) async {
     if (_cloudEmail.isEmpty) return false;
     _isSyncing = true;
-    _cloudStatus = 'Syncing to Cloud...';
+    _cloudStatus = 'Syncing...';
     if (!silent) notifyListeners();
 
     try {
@@ -854,7 +1161,7 @@ class TransactionProvider with ChangeNotifier {
           }),
         )
             .timeout(const Duration(seconds: 10));
-        success = res.statusCode >= 200 && res.statusCode < 300;
+        success = res.statusCode == 200 || res.statusCode == 201 || res.statusCode == 204;
       } else {
         final res = await http
             .post(
@@ -862,23 +1169,23 @@ class TransactionProvider with ChangeNotifier {
           body: base64Payload,
         )
             .timeout(const Duration(seconds: 10));
-        success = res.statusCode >= 200 && res.statusCode < 300;
+        success = res.statusCode == 200 || res.statusCode == 201;
       }
 
       if (success) {
         _lastSyncedAt = _generateTimestamp();
-        _cloudStatus = 'Synced to Cloud ✓';
+        _cloudStatus = 'Synced ✓';
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('last_synced_at', _lastSyncedAt);
       } else {
-        _cloudStatus = 'Offline (Saved Locally)';
+        _cloudStatus = 'Saved Locally';
       }
       _isSyncing = false;
       notifyListeners();
       return success;
     } catch (e) {
       _isSyncing = false;
-      _cloudStatus = 'Offline Mode (Local Saved)';
+      _cloudStatus = 'Local Mode';
       notifyListeners();
       return false;
     }
@@ -888,7 +1195,7 @@ class TransactionProvider with ChangeNotifier {
     if (_cloudEmail.isEmpty) return false;
     if (!silent) {
       _isSyncing = true;
-      _cloudStatus = 'Checking Cloud...';
+      _cloudStatus = 'Checking...';
       notifyListeners();
     }
 
@@ -909,7 +1216,7 @@ class TransactionProvider with ChangeNotifier {
           }
 
           _lastSyncedAt = _generateTimestamp();
-          _cloudStatus = 'Synced with Cloud ✓';
+          _cloudStatus = 'Synced ✓';
           await prefs.setString('last_synced_at', _lastSyncedAt);
           _isSyncing = false;
           if (changed || !silent) notifyListeners();
@@ -918,12 +1225,12 @@ class TransactionProvider with ChangeNotifier {
       }
 
       _isSyncing = false;
-      _cloudStatus = 'Synced with Cloud ✓';
+      _cloudStatus = 'Synced ✓';
       if (!silent) notifyListeners();
       return false;
     } catch (e) {
       _isSyncing = false;
-      _cloudStatus = 'Offline Mode';
+      _cloudStatus = 'Local Mode';
       if (!silent) notifyListeners();
       return false;
     }
@@ -932,7 +1239,7 @@ class TransactionProvider with ChangeNotifier {
   Future<bool> importFromSyncCode(String base64Code) async {
     try {
       final decodedJsonStr = utf8.decode(base64Decode(base64Code.trim()));
-      final decodedMap = jsonDecode(decodedJsonStr) as Map<String, dynamic>;
+      final decodedMap = jsonDecode(decodedJsonStr) as Map;
       _applyStateMap(decodedMap);
       await _saveData(syncCloud: true);
       notifyListeners();
@@ -974,7 +1281,15 @@ class TransactionProvider with ChangeNotifier {
   }
 
   // --- PERSONAL CRUD ---
-  void saveTransaction({String? id, required String title, required String category, required double amount, required bool isExpense}) {
+  void saveTransaction({
+    String? id,
+    required String title,
+    required String category,
+    required double amount,
+    required bool isExpense,
+    String attachmentBase64 = '',
+    String attachmentName = '',
+  }) {
     final newTx = TransactionModel(
       id: id ?? DateTime.now().millisecondsSinceEpoch.toString(),
       title: title,
@@ -983,7 +1298,9 @@ class TransactionProvider with ChangeNotifier {
       isExpense: isExpense,
       date: _generateTimestamp(),
       iconCode: isExpense ? Icons.arrow_upward_rounded.codePoint : Icons.arrow_downward_rounded.codePoint,
-      colorValue: isExpense ? 0xFFFF5252 : 0xFF69F0AE,
+      colorValue: isExpense ? 0xFFEF4444 : 0xFF10B981,
+      attachmentBase64: attachmentBase64,
+      attachmentName: attachmentName,
     );
     if (id == null) {
       _transactions.add(newTx);
@@ -1164,6 +1481,8 @@ class TransactionProvider with ChangeNotifier {
     required String paidByMemberId,
     required String paidByMemberName,
     bool creditMemberPaidAmount = false,
+    String attachmentBase64 = '',
+    String attachmentName = '',
   }) {
     final gIdx = _groups.indexWhere((g) => g.id == groupId);
     if (gIdx == -1) return;
@@ -1182,6 +1501,8 @@ class TransactionProvider with ChangeNotifier {
           paidByMemberId: paidByMemberId,
           paidByMemberName: paidByMemberName,
           date: _generateTimestamp(),
+          attachmentBase64: attachmentBase64,
+          attachmentName: attachmentName,
         ),
       );
 
@@ -1206,6 +1527,8 @@ class TransactionProvider with ChangeNotifier {
           paidByMemberId: paidByMemberId,
           paidByMemberName: paidByMemberName,
           date: _generateTimestamp(),
+          attachmentBase64: attachmentBase64,
+          attachmentName: attachmentName,
         );
       }
     }
@@ -1274,13 +1597,23 @@ class TransactionProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  void saveScheduledTx({String? id, required String title, required double amount, required String dueDate, required bool isExpense}) {
+  void saveScheduledTx({
+    String? id,
+    required String title,
+    required double amount,
+    required String dueDate,
+    required bool isExpense,
+    String attachmentBase64 = '',
+    String attachmentName = '',
+  }) {
     final newSch = ScheduledTxModel(
       id: id ?? DateTime.now().millisecondsSinceEpoch.toString(),
       title: title,
       amount: amount,
       dueDate: dueDate,
       isExpense: isExpense,
+      attachmentBase64: attachmentBase64,
+      attachmentName: attachmentName,
     );
     if (id == null) {
       _scheduledTxs.add(newSch);
@@ -1299,13 +1632,22 @@ class TransactionProvider with ChangeNotifier {
   }
 
   // --- BUSINESS CRUD ---
-  void saveBusinessTx({String? id, required String title, required String type, required double amount}) {
+  void saveBusinessTx({
+    String? id,
+    required String title,
+    required String type,
+    required double amount,
+    String attachmentBase64 = '',
+    String attachmentName = '',
+  }) {
     final newTx = BusinessTxModel(
       id: id ?? DateTime.now().millisecondsSinceEpoch.toString(),
       title: title,
       type: type,
       amount: amount,
       date: _generateTimestamp(),
+      attachmentBase64: attachmentBase64,
+      attachmentName: attachmentName,
     );
     if (id == null) {
       _businessTxs.add(newTx);
@@ -1365,7 +1707,6 @@ class TransactionProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // --- APPEARANCE, NOTIFICATIONS & PERMISSIONS ---
   void toggleDarkMode(bool isDark) {
     _isDarkMode = isDark;
     _saveData();
@@ -1384,11 +1725,11 @@ class TransactionProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  List<Map<String, dynamic>> get activeAlerts {
+  List get activeAlerts {
     if (!_notificationsEnabled) return [];
-    final List<Map<String, dynamic>> alerts = [];
+    final List alerts = [];
 
-    Map<String, double> spentByCat = {};
+    final Map<String, double> spentByCat = {};
     for (var tx in _transactions.where((t) => t.isExpense)) {
       spentByCat[tx.title] = (spentByCat[tx.title] ?? 0) + tx.amount;
     }
@@ -1398,7 +1739,7 @@ class TransactionProvider with ChangeNotifier {
         alerts.add({
           'title': spent >= limit ? 'Budget Exceeded: $cat' : 'Budget Warning: $cat',
           'body': 'Spent ৳${spent.toStringAsFixed(0)} of ৳${limit.toStringAsFixed(0)} (${((spent / limit) * 100).toStringAsFixed(0)}%)',
-          'color': 0xFFFF5252,
+          'color': 0xFFEF4444,
         });
       }
     });
@@ -1408,7 +1749,7 @@ class TransactionProvider with ChangeNotifier {
         alerts.add({
           'title': 'Group Collection Pending: ${g.name}',
           'body': 'Members still owe ৳${g.totalOwedToBudget.toStringAsFixed(0)} toward the ৳${g.totalBudget.toStringAsFixed(0)} budget.',
-          'color': 0xFFFFAB40,
+          'color': 0xFFF59E0B,
         });
       }
     }
@@ -1417,15 +1758,15 @@ class TransactionProvider with ChangeNotifier {
       alerts.add({
         'title': 'Scheduled Bill Reminder: ${s.title}',
         'body': '৳${s.amount.toStringAsFixed(0)} due on ${s.dueDate}',
-        'color': 0xFF64FFDA,
+        'color': 0xFF0EA5E9,
       });
     }
 
-    for (var p in _products.where((p) => p.stock <= 5)) {
+    for (var p in _products.where((p) => p.stock.clamp(0, 5) == p.stock)) {
       alerts.add({
         'title': 'Low Stock Alert: ${p.name}',
         'body': 'Only ${p.stock} units remaining in Business Inventory.',
-        'color': 0xFFFF5252,
+        'color': 0xFFEF4444,
       });
     }
 
