@@ -18,7 +18,7 @@ import 'wallets_screen.dart';
 import 'export_screen.dart';
 import 'providers/transaction_provider.dart';
 
-const List<double> kTrueColorPhotoMatrix = <double>[
+const List<double> kTrueColorPhotoMatrix = [
   0.402, -1.174, -0.228, 0, 255,
   -0.598, -0.174, -0.228, 0, 255,
   -0.598, -1.174,  0.772, 0, 255,
@@ -88,7 +88,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     final bool isWideWebLayout = MediaQuery.of(context).size.width >= 800;
 
     final appBarActions = [
-      // 1. 1-TAP BENGALI / ENGLISH SWITCHER
+      // 1-TAP BENGALI / ENGLISH SWITCHER
       Padding(
         padding: const EdgeInsets.symmetric(vertical: 10.0),
         child: InkWell(
@@ -111,20 +111,20 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       ),
       const SizedBox(width: 4),
 
-      // 2. CLOUD SYNC BUTTON
+      // CLOUD & GOOGLE DRIVE SYNC BUTTON
       IconButton(
-        tooltip: txProvider.tr('Cloud Sync', 'ক্লাউড সিঙ্ক'),
+        tooltip: txProvider.tr('Cloud & Google Drive Backup', 'ক্লাউড ও গুগল ড্রাইভ ব্যাকআপ'),
         icon: txProvider.isSyncing
             ? const SizedBox(
           width: 18,
           height: 18,
           child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF38BDF8)),
         )
-            : const Icon(Icons.cloud_done_outlined, color: Color(0xFF38BDF8)),
+            : const Icon(Icons.add_to_drive_rounded, color: Color(0xFF38BDF8)),
         onPressed: () => ProfileScreen.showCloudSyncSheet(context),
       ),
 
-      // 3. NOTIFICATION BELL
+      // NOTIFICATION BELL
       Stack(
         alignment: Alignment.center,
         children: [
@@ -149,7 +149,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         ],
       ),
 
-      // 4. DARK / LIGHT THEME TOGGLE
+      // DARK / LIGHT THEME TOGGLE
       IconButton(
         tooltip: txProvider.tr('Switch Theme', 'থিম পরিবর্তন'),
         icon: Icon(
@@ -159,7 +159,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         onPressed: () => txProvider.toggleDarkMode(!txProvider.isDarkMode),
       ),
 
-      // 5. PROFILE AVATAR
+      // PROFILE AVATAR
       Padding(
         padding: const EdgeInsets.only(right: 16.0, left: 4.0),
         child: GestureDetector(
@@ -333,7 +333,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 }
 
 // =============================================================================
-// PROFILE & SETTINGS SCREEN (WITH BENGALI / ENGLISH SELECTOR)
+// PROFILE & SETTINGS SCREEN (WITH DIRECT GOOGLE DRIVE BACKUP & DELETE ACCOUNT)
 // =============================================================================
 class ProfileScreen extends StatefulWidget {
   final String userName;
@@ -343,7 +343,9 @@ class ProfileScreen extends StatefulWidget {
 
   static void showCloudSyncSheet(BuildContext context) {
     final provider = context.read<TransactionProvider>();
-    final urlCtrl = TextEditingController(text: provider.customCloudUrl);
+    final googleEmailCtrl = TextEditingController(
+      text: provider.connectedGoogleEmail.isNotEmpty ? provider.connectedGoogleEmail : provider.cloudEmail,
+    );
     final codeCtrl = TextEditingController();
 
     showModalBottomSheet(
@@ -362,22 +364,27 @@ class ProfileScreen extends StatefulWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.cloud_sync_rounded, color: Color(0xFF38BDF8), size: 24),
-                        const SizedBox(width: 10),
-                        Text(
-                          txProvider.tr('Cloud Sync & Backup', 'ক্লাউড সিঙ্ক ও ব্যাকআপ'),
-                          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                        ),
-                      ],
+                    Expanded(
+                      child: Row(
+                        children: [
+                          const Icon(Icons.add_to_drive_rounded, color: Color(0xFF38BDF8), size: 24),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              txProvider.tr('Google Drive & Full Account Backup', 'গুগল ড্রাইভ ও সম্পূর্ণ অ্যাকাউন্ট ব্যাকআপ'),
+                              style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                     IconButton(icon: const Icon(Icons.close, color: Colors.grey), onPressed: () => Navigator.pop(ctx)),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 Container(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     color: const Color(0xFF0F172A),
                     borderRadius: BorderRadius.circular(14),
@@ -386,14 +393,37 @@ class ProfileScreen extends StatefulWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Account ID: ${txProvider.cloudEmail}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                      Text('Active Account: ${txProvider.cloudEmail}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
                       const SizedBox(height: 4),
-                      Text('Status: ${txProvider.cloudStatus}', style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 12, fontWeight: FontWeight.w600)),
-                      Text('Last Synced: ${txProvider.lastSyncedAt}', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
+                      Text(
+                        'Google Drive Status: ${txProvider.lastGoogleDriveBackupAt}',
+                        style: const TextStyle(color: Color(0xFF10B981), fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
+                      Text(
+                        'Includes: Personal Info + ${txProvider.transactions.length} Transactions + ${txProvider.wallets.length} Wallets + ${txProvider.groups.length} Groups + POS Data',
+                        style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                      ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
+
+                TextField(
+                  controller: googleEmailCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                  decoration: InputDecoration(
+                    labelText: txProvider.tr('Google Account for Drive Backup', 'গুগল ড্রাইভ ব্যাকআপ ইমেইল'),
+                    labelStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                    prefixIcon: const Icon(Icons.mail_outline, color: Color(0xFF38BDF8), size: 18),
+                    filled: true,
+                    fillColor: const Color(0xFF0F172A),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // DIRECT GOOGLE DRIVE BACKUP & RESTORE BUTTONS
                 Row(
                   children: [
                     Expanded(
@@ -401,79 +431,100 @@ class ProfileScreen extends StatefulWidget {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF0EA5E9),
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          padding: const EdgeInsets.symmetric(vertical: 13),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                         onPressed: txProvider.isSyncing
                             ? null
                             : () async {
-                          final ok = await txProvider.pushToCloud();
+                          final res = await txProvider.backupFullAccountToGoogleDrive(
+                            overrideGoogleEmail: googleEmailCtrl.text.trim(),
+                          );
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                backgroundColor: ok ? const Color(0xFF10B981) : Colors.orange,
-                                content: Text(ok ? 'Synced to Cloud!' : 'Saved locally'),
+                                backgroundColor: const Color(0xFF10B981),
+                                content: Text(res['message']?.toString() ?? 'Backed up to Google Drive!'),
                               ),
                             );
                           }
                         },
-                        icon: const Icon(Icons.cloud_upload_outlined, size: 18),
-                        label: Text(txProvider.tr('Push to Cloud', 'ক্লাউডে সেভ করুন'), style: const TextStyle(fontWeight: FontWeight.bold)),
+                        icon: const Icon(Icons.add_to_drive_rounded, size: 18),
+                        label: Text(txProvider.tr('Save to Google Drive', 'ড্রাইভে ব্যাকআপ রাখুন'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(
                           foregroundColor: const Color(0xFF38BDF8),
                           side: const BorderSide(color: Color(0xFF38BDF8)),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          padding: const EdgeInsets.symmetric(vertical: 13),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                         onPressed: txProvider.isSyncing
                             ? null
                             : () async {
-                          final ok = await txProvider.pullFromCloud(forceApply: true);
+                          final res = await txProvider.restoreFullAccountFromGoogleDrive(
+                            googleEmail: googleEmailCtrl.text.trim(),
+                          );
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                backgroundColor: ok ? const Color(0xFF10B981) : Colors.orange,
-                                content: Text(ok ? 'Cloud data loaded!' : 'Up to date'),
+                                backgroundColor: res['success'] == true ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                                content: Text(res['message']?.toString() ?? ''),
                               ),
                             );
                           }
                         },
                         icon: const Icon(Icons.cloud_download_outlined, size: 18),
-                        label: Text(txProvider.tr('Pull from Cloud', 'ক্লাউড থেকে লোড'), style: const TextStyle(fontWeight: FontWeight.bold)),
+                        label: Text(txProvider.tr('Restore from Drive', 'ড্রাইভ থেকে রিস্টোর'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 10),
+
+                // DOWNLOAD FULL .JSON FILE & COPY KEY
                 Row(
                   children: [
                     Expanded(
-                      child: TextField(
-                        controller: urlCtrl,
-                        style: const TextStyle(color: Colors.white, fontSize: 12),
-                        decoration: InputDecoration(
-                          hintText: 'Optional Custom Firebase URL',
-                          hintStyle: const TextStyle(color: Colors.grey, fontSize: 11),
-                          filled: true,
-                          fillColor: const Color(0xFF0F172A),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF10B981),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
+                        onPressed: () => txProvider.downloadFullAccountBackupFile(),
+                        icon: const Icon(Icons.download_rounded, size: 17),
+                        label: Text(txProvider.tr('Download .json File', 'ফাইল ডাউনলোড (.json)'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF334155), foregroundColor: Colors.white),
-                      onPressed: () => txProvider.setCustomCloudUrl(urlCtrl.text),
-                      child: const Text('Save'),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          side: const BorderSide(color: Color(0xFF334155)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: txProvider.generateFullAccountBackupString()));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(backgroundColor: Color(0xFF10B981), content: Text('Full Account Backup JSON copied to clipboard!')),
+                          );
+                        },
+                        icon: const Icon(Icons.copy, size: 16),
+                        label: Text(txProvider.tr('Copy Backup JSON', 'ব্যাকআপ কপি'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                      ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
+
+                // PASTE BACKUP JSON TO IMPORT INTO CURRENT ACCOUNT
                 Row(
                   children: [
                     Expanded(
@@ -481,7 +532,7 @@ class ProfileScreen extends StatefulWidget {
                         controller: codeCtrl,
                         style: const TextStyle(color: Colors.white, fontSize: 12),
                         decoration: InputDecoration(
-                          hintText: 'Paste backup token to restore',
+                          hintText: txProvider.tr('Paste Backup JSON or Key to import into this account...', 'এই অ্যাকাউন্টে ইমপোর্ট করতে ব্যাকআপ পেস্ট করুন...'),
                           hintStyle: const TextStyle(color: Colors.grey, fontSize: 11),
                           filled: true,
                           fillColor: const Color(0xFF0F172A),
@@ -491,14 +542,36 @@ class ProfileScreen extends StatefulWidget {
                     ),
                     const SizedBox(width: 8),
                     ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0EA5E9), foregroundColor: Colors.white),
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFF59E0B), foregroundColor: Colors.black),
                       onPressed: () async {
                         if (codeCtrl.text.trim().isNotEmpty) {
-                          await txProvider.importFromSyncCode(codeCtrl.text);
+                          final activeEmail = txProvider.cloudEmail;
+                          final res = await txProvider.restoreAccountFromBackupPayload(codeCtrl.text);
+                          if (res['success'] == true && activeEmail != 'Not signed in') {
+                            await txProvider.updateUserProfile(
+                              name: txProvider.userName,
+                              email: activeEmail,
+                              phone: txProvider.userPhone,
+                              dob: txProvider.userDob,
+                              gender: txProvider.userGender,
+                              occupation: txProvider.userOccupation,
+                              organization: txProvider.userOrganization,
+                              address: txProvider.userAddress,
+                              photoBase64: txProvider.userPhotoBase64,
+                            );
+                          }
                           if (ctx.mounted) Navigator.pop(ctx);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                backgroundColor: res['success'] == true ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                                content: Text(res['message']?.toString() ?? ''),
+                              ),
+                            );
+                          }
                         }
                       },
-                      child: const Text('Restore'),
+                      child: Text(txProvider.tr('Import', 'ইমপোর্ট'), style: const TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ],
                 ),
@@ -574,9 +647,9 @@ class ProfileScreen extends StatefulWidget {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(a['title'], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                                    Text(a['title']?.toString() ?? '', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
                                     const SizedBox(height: 3),
-                                    Text(a['body'], style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+                                    Text(a['body']?.toString() ?? '', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
                                   ],
                                 ),
                               ),
@@ -617,6 +690,106 @@ class _ProfileScreenState extends State<ProfileScreen> {
       radius: 40,
       backgroundColor: Color(0xFF0EA5E9),
       child: Icon(Icons.person, size: 44, color: Colors.white),
+    );
+  }
+
+  void _showDeleteAccountConfirmationDialog(BuildContext context, TransactionProvider provider) {
+    bool backupToDriveBeforeDelete = true;
+    bool isDeleting = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF1E293B),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: Color(0xFFEF4444), size: 24),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  provider.tr('Delete Full Account?', 'অ্যাকাউন্ট ডিলিট করবেন?'),
+                  style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                provider.tr(
+                  'This will delete your active account session and clear local data. If you keep Google Drive Backup enabled below, or download your .json backup file, you can restore 100% of your data anytime in the future!',
+                  'এটি আপনার বর্তমান অ্যাকাউন্টটি মুছে ফেলবে। তবে গুগল ড্রাইভে ব্যাকআপ রাখলে বা ফাইল ডাউনলোড করে রাখলে ভবিষ্যতে যেকোনো সময় নতুন বা একই অ্যাকাউন্টে সম্পূর্ণ ডাটা ফিরিয়ে আনতে পারবেন!',
+                ),
+                style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 12, height: 1.5),
+              ),
+              const SizedBox(height: 12),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                activeColor: const Color(0xFF0EA5E9),
+                title: Text(
+                  provider.tr(
+                    'Auto-save full backup to Google Drive before deleting',
+                    'ডিলিট করার আগে স্বয়ংক্রিয়ভাবে গুগল ড্রাইভে ব্যাকআপ রাখুন',
+                  ),
+                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+                value: backupToDriveBeforeDelete,
+                onChanged: (v) => setDialogState(() => backupToDriveBeforeDelete = v ?? true),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: isDeleting ? null : () => Navigator.pop(ctx),
+              child: Text(provider.tr('Cancel', 'বাতিল'), style: const TextStyle(color: Color(0xFF94A3B8))),
+            ),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFEF4444),
+                foregroundColor: Colors.white,
+              ),
+              onPressed: isDeleting
+                  ? null
+                  : () async {
+                setDialogState(() => isDeleting = true);
+                await provider.deleteFullAccount(backupToDriveFirst: backupToDriveBeforeDelete);
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      backgroundColor: const Color(0xFF10B981),
+                      content: Text(
+                        backupToDriveBeforeDelete
+                            ? provider.tr(
+                          'Account backed up to Google Drive and deleted! You can restore it anytime from the Login screen.',
+                          'গুগল ড্রাইভে ব্যাকআপ রেখে অ্যাকাউন্ট ডিলিট করা হয়েছে! লগইন স্ক্রিন থেকে যেকোনো সময় রিস্টোর করতে পারবেন।',
+                        )
+                            : provider.tr('Account deleted.', 'অ্যাকাউন্ট ডিলিট করা হয়েছে।'),
+                      ),
+                    ),
+                  );
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                        (route) => false,
+                  );
+                }
+              },
+              icon: const Icon(Icons.delete_forever_outlined, size: 18),
+              label: Text(
+                isDeleting
+                    ? provider.tr('Deleting...', 'ডিলিট হচ্ছে...')
+                    : provider.tr('Delete Account', 'অ্যাকাউন্ট ডিলিট'),
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -719,7 +892,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ],
                     ),
-                    if (txProvider.userPhone.isNotEmpty || txProvider.userAddress.isNotEmpty) ...[
+                    if (txProvider.userPhone.isNotEmpty || txProvider.userAddress.isNotEmpty || txProvider.userDob.isNotEmpty) ...[
                       const Padding(
                         padding: EdgeInsets.symmetric(vertical: 12.0),
                         child: Divider(color: Color(0xFF334155), height: 1),
@@ -730,6 +903,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         children: [
                           if (txProvider.userPhone.isNotEmpty)
                             Text('📞 ${txProvider.userPhone}', style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 12)),
+                          if (txProvider.userDob.isNotEmpty)
+                            Text('🎂 ${txProvider.userDob}', style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 12)),
                           if (txProvider.userAddress.isNotEmpty)
                             Text('📍 ${txProvider.userAddress}', style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 12)),
                         ],
@@ -738,6 +913,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ],
                 ),
               ),
+              const SizedBox(height: 24),
+
+              _buildSectionHeader(txProvider.tr('Full Account Backup & Google Drive', 'সম্পূর্ণ অ্যাকাউন্ট ব্যাকআপ ও গুগল ড্রাইভ')),
+              _buildSettingsGroup([
+                _buildSettingsTile(
+                  Icons.add_to_drive_rounded,
+                  txProvider.tr('Google Drive Direct Backup & Restore', 'সরাসরি গুগল ড্রাইভ ব্যাকআপ ও রিস্টোর'),
+                  trailingText: txProvider.isGoogleConnected ? 'Connected ✓' : 'Sync Drive',
+                  onTap: () => ProfileScreen.showCloudSyncSheet(context),
+                ),
+                _buildSettingsTile(
+                  Icons.import_export,
+                  txProvider.tr('Full Account Export (.json, PDF, PNG, JPG)', 'সম্পূর্ণ অ্যাকাউন্ট এক্সপোর্ট ও ইমপোর্ট'),
+                  trailingText: txProvider.tr('Backup / Import', 'ব্যাকআপ'),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => ExportScreen(userName: txProvider.userName, userEmail: txProvider.cloudEmail)),
+                  ),
+                ),
+              ]),
               const SizedBox(height: 24),
 
               _buildSectionHeader(txProvider.tr('Preferences & Language', 'পছন্দসমূহ এবং ভাষা')),
@@ -778,14 +973,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ScheduledTransactionsScreen())),
                 ),
                 _buildSettingsTile(
-                  Icons.import_export,
-                  txProvider.tr('Export Statement (PDF, PNG, JPG)', 'স্টেটমেন্ট এক্সপোর্ট (PDF, PNG, JPG)'),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => ExportScreen(userName: txProvider.userName, userEmail: txProvider.cloudEmail)),
-                  ),
-                ),
-                _buildSettingsTile(
                   Icons.calculate_outlined,
                   txProvider.tr('CalcBox Financial Calculator', 'ক্যালকবক্স ক্যালকুলেটর'),
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CalcBoxScreen())),
@@ -812,25 +999,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TermsPoliciesScreen())),
                 ),
               ]),
-              const SizedBox(height: 32),
+              const SizedBox(height: 28),
 
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFEF4444).withValues(alpha: 0.15),
-                  foregroundColor: const Color(0xFFEF4444),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  elevation: 0,
-                ),
-                onPressed: () async {
-                  await txProvider.clearSessionOnLogout();
-                  await AuthService.logout();
-                  if (context.mounted) {
-                    Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const LoginScreen()), (route) => false);
-                  }
-                },
-                icon: const Icon(Icons.logout),
-                label: Text(txProvider.tr('Sign Out', 'লগ আউট করুন'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              // SIGN OUT & DELETE ACCOUNT BUTTONS
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF334155),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 15),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        elevation: 0,
+                      ),
+                      onPressed: () async {
+                        await txProvider.clearSessionOnLogout();
+                        await AuthService.logout();
+                        if (context.mounted) {
+                          Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const LoginScreen()), (route) => false);
+                        }
+                      },
+                      icon: const Icon(Icons.logout, size: 18),
+                      label: Text(txProvider.tr('Sign Out', 'লগ আউট'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                        foregroundColor: const Color(0xFFEF4444),
+                        padding: const EdgeInsets.symmetric(vertical: 15),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        elevation: 0,
+                      ),
+                      onPressed: () => _showDeleteAccountConfirmationDialog(context, txProvider),
+                      icon: const Icon(Icons.delete_forever_outlined, size: 18),
+                      label: Text(txProvider.tr('Delete Account', 'অ্যাকাউন্ট ডিলিট'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 40),
             ],
@@ -862,7 +1071,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   color: const Color(0xFF38BDF8),
                 ),
                 title: const Text('English (Default)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                subtitle: const Text('Full English interface', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
                 onTap: () {
                   provider.setLanguage('en');
                   Navigator.pop(ctx);
@@ -874,7 +1082,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   color: const Color(0xFF38BDF8),
                 ),
                 title: const Text('বাংলা (Bengali)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                subtitle: const Text('সম্পূর্ণ বাংলা ইন্টারফেস', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
                 onTap: () {
                   provider.setLanguage('bn');
                   Navigator.pop(ctx);
@@ -1309,12 +1516,12 @@ class HelpCenterScreen extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         children: [
           ListTile(
-            title: Text(p.tr('1. Language Change (English / বাংলা)', '১. ভাষা পরিবর্তন (English / বাংলা)'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            subtitle: Text(p.tr('Tap the EN / বাংলা button in the top bar to switch languages immediately.', 'উপরের বারের EN / বাংলা বাটনে ট্যাপ করে সাথে সাথে ভাষা পরিবর্তন করুন।'), style: const TextStyle(color: Color(0xFF94A3B8))),
+            title: Text(p.tr('1. Full Account Backup & Google Drive Sync', '১. সম্পূর্ণ অ্যাকাউন্ট ব্যাকআপ ও গুগল ড্রাইভ সিঙ্ক'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            subtitle: Text(p.tr('Go to Export Financial Statement or tap the Google Drive icon in the top bar to save 100% of your account directly to Google Drive or download a .json backup file.', 'এক্সপোর্ট স্ক্রিন অথবা উপরের গুগল ড্রাইভ আইকনে ট্যাপ করে আপনার সম্পূর্ণ অ্যাকাউন্ট গুগল ড্রাইভে সেভ করুন অথবা .json ফাইল ডাউনলোড করুন।'), style: const TextStyle(color: Color(0xFF94A3B8))),
           ),
           ListTile(
-            title: Text(p.tr('2. Uploading Receipts & Memos (PDF/JPG/PNG)', '২. রসিদ ও মেমো আপলোড (PDF/JPG/PNG)'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            subtitle: Text(p.tr('Every transaction form includes an "Attach Receipt / Memo" button.', 'প্রতিটি লেনদেনের ফর্মে রসিদ বা মেমো যুক্ত করার বাটন রয়েছে।'), style: const TextStyle(color: Color(0xFF94A3B8))),
+            title: Text(p.tr('2. Importing into a New or Existing Account', '২. নতুন বা বিদ্যমান অ্যাকাউন্টে ব্যাকআপ ইমপোর্ট'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            subtitle: Text(p.tr('Even if you delete your account and sign up months later with a new email, open "Import / Restore Backup" to load all your personal info, transactions, and other data.', 'অ্যাকাউন্ট ডিলিট করার পর নতুন অ্যাকাউন্ট খুলেও "Import / Restore Backup" অপশন থেকে পূর্বের সকল ডাটা ফিরিয়ে আনতে পারবেন।'), style: const TextStyle(color: Color(0xFF94A3B8))),
           ),
         ],
       ),
@@ -1395,8 +1602,8 @@ class TermsPoliciesScreen extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         child: Text(
           p.tr(
-            'All financial records, receipts, and memos are encrypted and synchronized with your personal FinBlend Cloud ID.',
-            'সকল আর্থিক তথ্য, রসিদ এবং মেমো আপনার ব্যক্তিগত ফিনব্লেন্ড ক্লাউড আইডির সাথে নিরাপদে সংরক্ষিত থাকে।',
+            'All financial records, receipts, memos, and full account backups are encrypted and synchronized with your personal FinBlend Cloud ID and Google Drive Vault.',
+            'সকল আর্থিক তথ্য, রসিদ, মেমো এবং সম্পূর্ণ অ্যাকাউন্ট ব্যাকআপ আপনার ব্যক্তিগত ফিনব্লেন্ড ক্লাউড আইডি ও গুগল ড্রাইভে নিরাপদে সংরক্ষিত থাকে।',
           ),
           style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 14, height: 1.6),
         ),

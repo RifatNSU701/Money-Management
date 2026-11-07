@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -61,7 +62,7 @@ class _ExportScreenState extends State<ExportScreen> {
                     ),
                     if (provider.userPhone.isNotEmpty || provider.userAddress.isNotEmpty)
                       pw.Text(
-                        'Contact: ${provider.userPhone}  |  Address: ${provider.userAddress}',
+                        'Phone: ${provider.userPhone}  |  Occupation: ${provider.userOccupation}  |  Address: ${provider.userAddress}',
                         style: const pw.TextStyle(fontSize: 9),
                       ),
                   ],
@@ -77,7 +78,6 @@ class _ExportScreenState extends State<ExportScreen> {
             ),
             pw.Divider(height: 22),
 
-            // EXECUTIVE SUMMARY TABLE
             pw.Text('1. Executive Portfolio Summary', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
             pw.SizedBox(height: 8),
             pw.TableHelper.fromTextArray(
@@ -102,7 +102,6 @@ class _ExportScreenState extends State<ExportScreen> {
             ),
             pw.SizedBox(height: 18),
 
-            // PERSONAL LEDGER SECTION
             if (_exportScope != 'Business POS Only') ...[
               pw.Text(
                 '2. Personal Transactions & Attached Memos (${provider.transactions.length} entries)',
@@ -127,7 +126,6 @@ class _ExportScreenState extends State<ExportScreen> {
               pw.SizedBox(height: 18),
             ],
 
-            // BUSINESS POS SECTION
             if (_exportScope != 'Personal Only') ...[
               pw.Text(
                 '3. Business POS Vouchers & Inventory Summary (${provider.businessTxs.length} entries)',
@@ -216,12 +214,262 @@ class _ExportScreenState extends State<ExportScreen> {
     }
   }
 
+  // ===========================================================================
+  // 3. IMPORT / RESTORE BACKUP INTO NEW OR EXISTING ACCOUNT MODAL
+  // ===========================================================================
+  void _showImportRestoreSheet(BuildContext context, TransactionProvider provider) {
+    final String activeEmail = provider.cloudEmail == 'Not signed in' ? '' : provider.cloudEmail;
+    final driveEmailCtrl = TextEditingController(
+      text: provider.connectedGoogleEmail.isNotEmpty
+          ? provider.connectedGoogleEmail
+          : (provider.deviceGoogleAccounts.isNotEmpty ? provider.deviceGoogleAccounts.first : activeEmail),
+    );
+    final jsonBackupCtrl = TextEditingController();
+    bool keepCurrentAccountEmail = true;
+    bool isWorking = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF1E293B),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setSheetState) => Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom + 24, left: 24, right: 24, top: 24),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        provider.tr(
+                          'Import Backup into This or New Account',
+                          'এই অ্যাকাউন্টে বা নতুন অ্যাকাউন্টে ব্যাকআপ ইমপোর্ট করুন',
+                        ),
+                        style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    IconButton(icon: const Icon(Icons.close, color: Colors.grey), onPressed: () => Navigator.pop(ctx)),
+                  ],
+                ),
+                Text(
+                  provider.tr(
+                    'Restore 100% of your Personal Info, Transactions, Receipts, Wallets, Groups, and Business POS data from Google Drive or a downloaded backup file.',
+                    'গুগল ড্রাইভ বা ডাউনলোড করা ব্যাকআপ ফাইল থেকে আপনার ব্যক্তিগত তথ্য, সকল লেনদেন, রসিদ, ওয়ালেট, গ্রুপ এবং বিজনেস পিওএস ডাটা ইমপোর্ট করুন।',
+                  ),
+                  style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                ),
+                const SizedBox(height: 12),
+
+                if (activeEmail.isNotEmpty)
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    activeThumbColor: const Color(0xFF10B981),
+                    title: Text(
+                      provider.tr(
+                        'Keep current account login ($activeEmail) & import all data into this account',
+                        'বর্তমান অ্যাকাউন্টে ($activeEmail) সকল ব্যাকআপ ডাটা ইমপোর্ট করে চালিয়ে যান',
+                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                    value: keepCurrentAccountEmail,
+                    onChanged: (v) => setSheetState(() => keepCurrentAccountEmail = v),
+                  ),
+                const SizedBox(height: 10),
+
+                // OPTION 1: RESTORE DIRECTLY FROM GOOGLE DRIVE
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F172A),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.4)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        provider.tr('Option 1: Pull Backup Directly from Google Drive', 'বিকল্প ১: সরাসরি গুগল ড্রাইভ থেকে ইমপোর্ট করুন'),
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: driveEmailCtrl,
+                        keyboardType: TextInputType.emailAddress,
+                        style: const TextStyle(color: Colors.white, fontSize: 13),
+                        decoration: InputDecoration(
+                          labelText: provider.tr('Google Account Email used for backup', 'ব্যাকআপ রাখা গুগল ইমেইল'),
+                          labelStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                          prefixIcon: const Icon(Icons.add_to_drive_rounded, color: Color(0xFF38BDF8), size: 18),
+                          filled: true,
+                          fillColor: const Color(0xFF1E293B),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0EA5E9),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        onPressed: isWorking
+                            ? null
+                            : () async {
+                          setSheetState(() => isWorking = true);
+                          final res = await provider.restoreFullAccountFromGoogleDrive(
+                            googleEmail: driveEmailCtrl.text.trim(),
+                          );
+                          if (res['success'] == true && keepCurrentAccountEmail && activeEmail.isNotEmpty) {
+                            await provider.updateUserProfile(
+                              name: provider.userName,
+                              email: activeEmail,
+                              phone: provider.userPhone,
+                              dob: provider.userDob,
+                              gender: provider.userGender,
+                              occupation: provider.userOccupation,
+                              organization: provider.userOrganization,
+                              address: provider.userAddress,
+                              photoBase64: provider.userPhotoBase64,
+                            );
+                          }
+                          setSheetState(() => isWorking = false);
+                          if (ctx.mounted) Navigator.pop(ctx);
+                          if (mounted) {
+                            ScaffoldMessenger.of(this.context).showSnackBar(
+                              SnackBar(
+                                backgroundColor: res['success'] == true ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                                content: Text(res['message']?.toString() ?? ''),
+                              ),
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.cloud_download_outlined, size: 18),
+                        label: Text(
+                          provider.tr('Restore from Google Drive Now', 'গুগল ড্রাইভ থেকে রিস্টোর করুন'),
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                // OPTION 2: PASTE DOWNLOADED BACKUP FILE (.JSON) OR BACKUP KEY
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F172A),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              provider.tr('Option 2: Import Downloaded Backup (.json / Key)', 'বিকল্প ২: ডাউনলোড করা ব্যাকআপ (.json / কোড) ইমপোর্ট'),
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: () async {
+                              final data = await Clipboard.getData('text/plain');
+                              if (data?.text != null) {
+                                setSheetState(() => jsonBackupCtrl.text = data!.text!);
+                              }
+                            },
+                            icon: const Icon(Icons.paste_rounded, size: 14, color: Color(0xFF38BDF8)),
+                            label: Text(provider.tr('Paste', 'পেস্ট'), style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 11)),
+                          ),
+                        ],
+                      ),
+                      TextField(
+                        controller: jsonBackupCtrl,
+                        maxLines: 3,
+                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                        decoration: InputDecoration(
+                          hintText: provider.tr(
+                            'Paste contents of FinBlend_Full_Account_Backup.json or Backup Key here...',
+                            'ব্যাকআপ ফাইল (.json) বা ব্যাকআপ কোড এখানে পেস্ট করুন...',
+                          ),
+                          hintStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
+                          filled: true,
+                          fillColor: const Color(0xFF1E293B),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF10B981),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        onPressed: isWorking
+                            ? null
+                            : () async {
+                          setSheetState(() => isWorking = true);
+                          final res = await provider.restoreAccountFromBackupPayload(jsonBackupCtrl.text);
+                          if (res['success'] == true && keepCurrentAccountEmail && activeEmail.isNotEmpty) {
+                            await provider.updateUserProfile(
+                              name: provider.userName,
+                              email: activeEmail,
+                              phone: provider.userPhone,
+                              dob: provider.userDob,
+                              gender: provider.userGender,
+                              occupation: provider.userOccupation,
+                              organization: provider.userOrganization,
+                              address: provider.userAddress,
+                              photoBase64: provider.userPhotoBase64,
+                            );
+                          }
+                          setSheetState(() => isWorking = false);
+                          if (ctx.mounted) Navigator.pop(ctx);
+                          if (mounted) {
+                            ScaffoldMessenger.of(this.context).showSnackBar(
+                              SnackBar(
+                                backgroundColor: res['success'] == true ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                                content: Text(res['message']?.toString() ?? ''),
+                              ),
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.upload_file_rounded, size: 18),
+                        label: Text(
+                          provider.tr('Import Backup & Continue', 'ব্যাকআপ ইমপোর্ট করে চালিয়ে যান'),
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<TransactionProvider>();
     final double netWorth = provider.totalBalance + provider.totalWalletsBalance;
     final int receiptCount = provider.transactions.where((t) => t.hasAttachment).length +
         provider.businessTxs.where((t) => t.hasAttachment).length;
+    final String driveTargetEmail = provider.connectedGoogleEmail.isNotEmpty
+        ? provider.connectedGoogleEmail
+        : provider.cloudEmail;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
@@ -229,8 +477,8 @@ class _ExportScreenState extends State<ExportScreen> {
         backgroundColor: const Color(0xFF0F172A),
         elevation: 0,
         title: Text(
-          provider.tr('Export Financial Statement', 'আর্থিক স্টেটমেন্ট এক্সপোর্ট'),
-          style: const TextStyle(fontWeight: FontWeight.bold),
+          provider.tr('Backup, Google Drive & Export', 'ফুল ব্যাকআপ, গুগল ড্রাইভ ও এক্সপোর্ট'),
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
         ),
         actions: [
           Padding(
@@ -261,7 +509,205 @@ class _ExportScreenState extends State<ExportScreen> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
             children: [
-              // 1. SCOPE FILTER CHIPS
+              // ===============================================================
+              // 1. FULL ACCOUNT BACKUP, GOOGLE DRIVE DIRECT SYNC & IMPORT HUB
+              // ===============================================================
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E293B),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFF0EA5E9).withValues(alpha: 0.5), width: 1.5),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0EA5E9).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.add_to_drive_rounded, color: Color(0xFF38BDF8), size: 24),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                provider.tr(
+                                  'Full Account Backup & Direct Google Drive Vault',
+                                  'সম্পূর্ণ অ্যাকাউন্ট ব্যাকআপ ও সরাসরি গুগল ড্রাইভ ভল্ট',
+                                ),
+                                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${provider.tr("Google Account", "গুগল অ্যাকাউন্ট")}: $driveTargetEmail • ${provider.lastGoogleDriveBackupAt}',
+                                style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 11, fontWeight: FontWeight.w600),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+
+                    // WHAT IS INCLUDED IN THE BACKUP (3 PILLARS)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0F172A),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFF334155)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            provider.tr('What This Full Backup Exports & Restores:', 'এই ব্যাকআপে যা যা সংরক্ষিত থাকবে:'),
+                            style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            provider.tr(
+                              '✓ 1. All Personal Info: ${provider.userName}, Phone, DOB, Gender, Occupation, Address & Photo\n'
+                                  '✓ 2. All Transactions: ${provider.transactions.length} Personal + ${provider.businessTxs.length} Business POS + $receiptCount Receipts\n'
+                                  '✓ 3. All Other Data: ${provider.wallets.length} Wallets, ${provider.budgets.length} Budgets, ${provider.groups.length} Groups, ${provider.products.length} Products & ${provider.parties.length} Parties',
+                              '✓ ১. সকল ব্যক্তিগত তথ্য: নাম (${provider.userName}), ফোন, জন্ম তারিখ, পেশা, ঠিকানা ও ছবি\n'
+                                  '✓ ২. সকল লেনদেন: ${provider.transactions.length} টি ব্যক্তিগত + ${provider.businessTxs.length} টি পিওএস + $receiptCount টি রসিদ\n'
+                                  '✓ ৩. অন্যান্য সকল ডাটা: ${provider.wallets.length} টি ওয়ালেট, ${provider.budgets.length} টি বাজেট, ${provider.groups.length} টি গ্রুপ ও ${provider.products.length} টি পণ্য',
+                            ),
+                            style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 11, height: 1.45),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // BUTTON ROW 1: DIRECT GOOGLE DRIVE SAVE + DOWNLOAD .JSON FILE
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF0EA5E9),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 13),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            onPressed: provider.isSyncing
+                                ? null
+                                : () async {
+                              final res = await provider.backupFullAccountToGoogleDrive();
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    backgroundColor: const Color(0xFF10B981),
+                                    content: Text(res['message']?.toString() ?? 'Saved to Google Drive!'),
+                                  ),
+                                );
+                              }
+                            },
+                            icon: const Icon(Icons.add_to_drive_rounded, size: 18),
+                            label: Text(
+                              provider.tr('Save to Google Drive', 'গুগল ড্রাইভে সেভ'),
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF10B981),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 13),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            onPressed: () async {
+                              await provider.downloadFullAccountBackupFile();
+                            },
+                            icon: const Icon(Icons.download_for_offline_outlined, size: 18),
+                            label: Text(
+                              provider.tr('Download Backup (.json)', 'ব্যাকআপ ডাউনলোড (.json)'),
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+
+                    // BUTTON ROW 2: IMPORT INTO NEW/EXISTING ACCOUNT + COPY KEY
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFFF59E0B),
+                              side: const BorderSide(color: Color(0xFFF59E0B)),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            onPressed: () => _showImportRestoreSheet(context, provider),
+                            icon: const Icon(Icons.restore_page_outlined, size: 18),
+                            label: Text(
+                              provider.tr('Import / Restore Backup', 'ব্যাকআপ ইমপোর্ট / রিস্টোর'),
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF38BDF8),
+                              side: const BorderSide(color: Color(0xFF334155)),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            onPressed: () {
+                              final jsonStr = provider.generateFullAccountBackupString();
+                              Clipboard.setData(ClipboardData(text: jsonStr));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  backgroundColor: const Color(0xFF10B981),
+                                  content: Text(
+                                    provider.tr(
+                                      'Full Account Backup JSON copied to clipboard! You can paste it into any new or existing account.',
+                                      'সম্পূর্ণ অ্যাকাউন্ট ব্যাকআপ কপি করা হয়েছে! যেকোনো নতুন বা বিদ্যমান অ্যাকাউন্টে পেস্ট করতে পারবেন।',
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.copy_all_rounded, size: 18),
+                            label: Text(
+                              provider.tr('Copy Backup JSON', 'ব্যাকআপ কোড কপি'),
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 22),
+
+              // ===============================================================
+              // 2. PRINTABLE STATEMENT EXPORT (PDF, PNG, JPG)
+              // ===============================================================
+              Text(
+                provider.tr('Printable Statement Export (PDF / PNG / JPG)', 'প্রিন্টেবল স্টেটমেন্ট এক্সপোর্ট (PDF / PNG / JPG)'),
+                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 10),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -280,9 +726,8 @@ class _ExportScreenState extends State<ExportScreen> {
                   );
                 }).toList(),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
 
-              // 2. EXPORT ACTION BUTTONS (PDF, PNG, JPG)
               Row(
                 children: [
                   Expanded(
@@ -385,7 +830,6 @@ class _ExportScreenState extends State<ExportScreen> {
                         child: Divider(color: Color(0xFF334155), height: 1),
                       ),
 
-                      // PORTFOLIO DONUT CHART INSIDE STATEMENT
                       Text(
                         provider.tr('Portfolio & Cashflow Breakdown Chart', 'পোর্টফোলিও এবং ক্যাশফ্লো চার্ট'),
                         style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
@@ -418,7 +862,6 @@ class _ExportScreenState extends State<ExportScreen> {
                         child: Divider(color: Color(0xFF334155), height: 1),
                       ),
 
-                      // RECENT ENTRIES SNAPSHOT
                       Text(
                         provider.tr('Recent Verified Entries', 'সাম্প্রতিক যাচাইকৃত লেনদেন'),
                         style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
