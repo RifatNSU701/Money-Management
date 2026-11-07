@@ -88,7 +88,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     final bool isWideWebLayout = MediaQuery.of(context).size.width >= 800;
 
     final appBarActions = [
-      // 1-TAP BENGALI / ENGLISH SWITCHER
+      // 1. 1-TAP BENGALI / ENGLISH SWITCHER
       Padding(
         padding: const EdgeInsets.symmetric(vertical: 10.0),
         child: InkWell(
@@ -111,7 +111,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       ),
       const SizedBox(width: 4),
 
-      // CLOUD & GOOGLE DRIVE SYNC BUTTON
+      // 2. CLOUD & GOOGLE DRIVE SYNC BUTTON
       IconButton(
         tooltip: txProvider.tr('Cloud & Google Drive Backup', 'ক্লাউড ও গুগল ড্রাইভ ব্যাকআপ'),
         icon: txProvider.isSyncing
@@ -124,7 +124,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         onPressed: () => ProfileScreen.showCloudSyncSheet(context),
       ),
 
-      // NOTIFICATION BELL
+      // 3. NOTIFICATION BELL
       Stack(
         alignment: Alignment.center,
         children: [
@@ -149,7 +149,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         ],
       ),
 
-      // DARK / LIGHT THEME TOGGLE
+      // 4. DARK / LIGHT THEME TOGGLE
       IconButton(
         tooltip: txProvider.tr('Switch Theme', 'থিম পরিবর্তন'),
         icon: Icon(
@@ -159,7 +159,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         onPressed: () => txProvider.toggleDarkMode(!txProvider.isDarkMode),
       ),
 
-      // PROFILE AVATAR
+      // 5. PROFILE AVATAR
       Padding(
         padding: const EdgeInsets.only(right: 16.0, left: 4.0),
         child: GestureDetector(
@@ -343,9 +343,7 @@ class ProfileScreen extends StatefulWidget {
 
   static void showCloudSyncSheet(BuildContext context) {
     final provider = context.read<TransactionProvider>();
-    final googleEmailCtrl = TextEditingController(
-      text: provider.connectedGoogleEmail.isNotEmpty ? provider.connectedGoogleEmail : provider.cloudEmail,
-    );
+    final googleEmailCtrl = TextEditingController(text: provider.connectedGoogleEmail);
     final codeCtrl = TextEditingController();
 
     showModalBottomSheet(
@@ -393,11 +391,15 @@ class ProfileScreen extends StatefulWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Active Account: ${txProvider.cloudEmail}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                      Text('Active App Account: ${txProvider.cloudEmail}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
                       const SizedBox(height: 4),
                       Text(
-                        'Google Drive Status: ${txProvider.lastGoogleDriveBackupAt}',
-                        style: const TextStyle(color: Color(0xFF10B981), fontSize: 12, fontWeight: FontWeight.w600),
+                        'Device Google Drive Account: ${txProvider.connectedGoogleEmail}',
+                        style: const TextStyle(color: Color(0xFF10B981), fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        'Last Drive Backup: ${txProvider.lastGoogleDriveBackupAt}',
+                        style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 11),
                       ),
                       Text(
                         'Includes: Personal Info + ${txProvider.transactions.length} Transactions + ${txProvider.wallets.length} Wallets + ${txProvider.groups.length} Groups + POS Data',
@@ -413,7 +415,7 @@ class ProfileScreen extends StatefulWidget {
                   keyboardType: TextInputType.emailAddress,
                   style: const TextStyle(color: Colors.white, fontSize: 13),
                   decoration: InputDecoration(
-                    labelText: txProvider.tr('Google Account for Drive Backup', 'গুগল ড্রাইভ ব্যাকআপ ইমেইল'),
+                    labelText: txProvider.tr('Google Account for Drive Backup (@gmail.com)', 'গুগল ড্রাইভ ব্যাকআপ ইমেইল (@gmail.com)'),
                     labelStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
                     prefixIcon: const Icon(Icons.mail_outline, color: Color(0xFF38BDF8), size: 18),
                     filled: true,
@@ -443,8 +445,8 @@ class ProfileScreen extends StatefulWidget {
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                backgroundColor: const Color(0xFF10B981),
-                                content: Text(res['message']?.toString() ?? 'Backed up to Google Drive!'),
+                                backgroundColor: res['success'] == true ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                                content: Text(res['message']?.toString() ?? ''),
                               ),
                             );
                           }
@@ -467,6 +469,7 @@ class ProfileScreen extends StatefulWidget {
                             : () async {
                           final res = await txProvider.restoreFullAccountFromGoogleDrive(
                             googleEmail: googleEmailCtrl.text.trim(),
+                            preserveCurrentAccountEmail: true,
                           );
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -532,7 +535,7 @@ class ProfileScreen extends StatefulWidget {
                         controller: codeCtrl,
                         style: const TextStyle(color: Colors.white, fontSize: 12),
                         decoration: InputDecoration(
-                          hintText: txProvider.tr('Paste Backup JSON or Key to import into this account...', 'এই অ্যাকাউন্টে ইমপোর্ট করতে ব্যাকআপ পেস্ট করুন...'),
+                          hintText: txProvider.tr('Paste Backup JSON to import into this account...', 'এই অ্যাকাউন্টে ইমপোর্ট করতে ব্যাকআপ পেস্ট করুন...'),
                           hintStyle: const TextStyle(color: Colors.grey, fontSize: 11),
                           filled: true,
                           fillColor: const Color(0xFF0F172A),
@@ -545,22 +548,11 @@ class ProfileScreen extends StatefulWidget {
                       style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFF59E0B), foregroundColor: Colors.black),
                       onPressed: () async {
                         if (codeCtrl.text.trim().isNotEmpty) {
-                          final activeEmail = txProvider.cloudEmail;
-                          final res = await txProvider.restoreAccountFromBackupPayload(codeCtrl.text);
-                          if (res['success'] == true && activeEmail != 'Not signed in') {
-                            await txProvider.updateUserProfile(
-                              name: txProvider.userName,
-                              email: activeEmail,
-                              phone: txProvider.userPhone,
-                              dob: txProvider.userDob,
-                              gender: txProvider.userGender,
-                              occupation: txProvider.userOccupation,
-                              organization: txProvider.userOrganization,
-                              address: txProvider.userAddress,
-                              photoBase64: txProvider.userPhotoBase64,
-                            );
-                          }
-                          if (ctx.mounted) Navigator.pop(ctx);
+                          final res = await txProvider.restoreAccountFromBackupPayload(
+                            codeCtrl.text,
+                            preserveCurrentAccountEmail: true,
+                          );
+                          if (ctx.mounted && res['success'] == true) Navigator.pop(ctx);
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
@@ -732,8 +724,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 activeColor: const Color(0xFF0EA5E9),
                 title: Text(
                   provider.tr(
-                    'Auto-save full backup to Google Drive before deleting',
-                    'ডিলিট করার আগে স্বয়ংক্রিয়ভাবে গুগল ড্রাইভে ব্যাকআপ রাখুন',
+                    'Auto-save full backup to Google Drive (${provider.connectedGoogleEmail}) before deleting',
+                    'ডিলিট করার আগে স্বয়ংক্রিয়ভাবে গুগল ড্রাইভে (${provider.connectedGoogleEmail}) ব্যাকআপ রাখুন',
                   ),
                   style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
                 ),
@@ -873,6 +865,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               Text(txProvider.userName, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
                               const SizedBox(height: 4),
                               Text(txProvider.cloudEmail, style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 13)),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Google Drive: ${txProvider.connectedGoogleEmail}',
+                                style: const TextStyle(color: Color(0xFF10B981), fontSize: 11, fontWeight: FontWeight.w600),
+                              ),
                               if (txProvider.userOccupation.isNotEmpty) ...[
                                 const SizedBox(height: 4),
                                 Text(txProvider.userOccupation, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
@@ -920,7 +917,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _buildSettingsTile(
                   Icons.add_to_drive_rounded,
                   txProvider.tr('Google Drive Direct Backup & Restore', 'সরাসরি গুগল ড্রাইভ ব্যাকআপ ও রিস্টোর'),
-                  trailingText: txProvider.isGoogleConnected ? 'Connected ✓' : 'Sync Drive',
+                  trailingText: txProvider.connectedGoogleEmail,
                   onTap: () => ProfileScreen.showCloudSyncSheet(context),
                 ),
                 _buildSettingsTile(
@@ -1134,7 +1131,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (trailingText != null) Text(trailingText, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+          if (trailingText != null)
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 140),
+              child: Text(
+                trailingText,
+                style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           if (trailingText != null) const SizedBox(width: 6),
           const Icon(Icons.chevron_right, color: Color(0xFF64748B), size: 18),
         ],

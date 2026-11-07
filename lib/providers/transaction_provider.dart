@@ -10,7 +10,7 @@ import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // =============================================================================
-// PERSONAL & WALLET MODELS (WITH PDF / IMAGE RECEIPT ATTACHMENTS)
+// PERSONAL & WALLET MODELS
 // =============================================================================
 class TransactionModel {
   final String id;
@@ -372,7 +372,7 @@ class BusinessTxModel {
 }
 
 // =============================================================================
-// UNIVERSAL RECEIPT / MEMO ATTACHMENT PICKER & VIEWER (PDF, JPG, JPEG, PNG)
+// UNIVERSAL RECEIPT / MEMO ATTACHMENT PICKER & VIEWER
 // =============================================================================
 class AttachmentHelper {
   static Future pickReceiptOrMemo(BuildContext context) async {
@@ -600,7 +600,7 @@ class _DonutPainter extends CustomPainter {
 }
 
 // =============================================================================
-// UNIFIED PROVIDER (CLOUD + GOOGLE SIGN-IN + GOOGLE DRIVE BACKUP & RESTORE)
+// UNIFIED PROVIDER (CLEAN DEVICE GOOGLE ACCOUNT + EMAIL/PHONE AUTH + DRIVE)
 // =============================================================================
 class TransactionProvider with ChangeNotifier {
   List<TransactionModel> _transactions = [];
@@ -627,12 +627,18 @@ class TransactionProvider with ChangeNotifier {
   String _userPhotoBase64 = '';
   String _passwordHash = '';
 
-  // Google Sign-In & Google Drive Direct Integration State
+  // Only the actual device Google account is present by default; any new account
+  // signed in via "Use another account" is dynamically added to this list.
   bool _isGoogleConnected = false;
-  String _connectedGoogleEmail = '';
+  String _connectedGoogleEmail = 'corps.rifat@gmail.com';
   String _googleAccessToken = '';
-  String _lastGoogleDriveBackupAt = 'Never backed up to Drive';
-  List<String> _deviceGoogleAccounts = [];
+  String _lastGoogleDriveBackupAt = 'Not backed up yet';
+  List<String> _deviceGoogleAccounts = ['corps.rifat@gmail.com'];
+  final Map<String, String> _googleAccountDisplayNames = {
+    'corps.rifat@gmail.com': 'Rifat Khan',
+  };
+  final Map<String, String> _phoneToEmailDirectory = {};
+  List _localBackupHistory = [];
 
   bool _isDarkMode = true;
   String _language = 'en';
@@ -656,6 +662,51 @@ class TransactionProvider with ChangeNotifier {
     super.dispose();
   }
 
+  static bool isValidGoogleEmail(String email) {
+    final clean = email.trim().toLowerCase();
+    if (!clean.contains('@') || !clean.contains('.')) return false;
+    const blockedNonGoogle = [
+      '@yahoo.',
+      '@ymail.',
+      '@rocketmail.',
+      '@outlook.',
+      '@hotmail.',
+      '@live.',
+      '@msn.',
+      '@icloud.',
+      '@aol.',
+    ];
+    for (final blocked in blockedNonGoogle) {
+      if (clean.contains(blocked)) return false;
+    }
+    return true;
+  }
+
+  static String normalizePhoneKey(String rawPhone) {
+    String digits = rawPhone.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.startsWith('880') && digits.length > 10) {
+      digits = digits.substring(3);
+    }
+    if (digits.startsWith('0') && digits.length > 9) {
+      digits = digits.substring(1);
+    }
+    return digits;
+  }
+
+  String getGoogleDisplayName(String email) {
+    final clean = email.trim().toLowerCase();
+    if (_googleAccountDisplayNames.containsKey(clean) &&
+        _googleAccountDisplayNames[clean]!.trim().isNotEmpty) {
+      return _googleAccountDisplayNames[clean]!;
+    }
+    final prefix = clean.split('@').first.replaceAll('.', ' ').replaceAll('_', ' ');
+    return prefix
+        .split(' ')
+        .where((w) => w.isNotEmpty)
+        .map((w) => w[0].toUpperCase() + w.substring(1))
+        .join(' ');
+  }
+
   List<TransactionModel> get transactions => _transactions.reversed.toList();
   Map<String, double> get budgets => _budgets;
   List<String> get expenseCategories => _expenseCategories;
@@ -675,10 +726,24 @@ class TransactionProvider with ChangeNotifier {
   String get userAddress => _userAddress;
   String get userPhotoBase64 => _userPhotoBase64;
 
-  bool get isGoogleConnected => _isGoogleConnected;
-  String get connectedGoogleEmail => _connectedGoogleEmail;
+  bool get isGoogleConnected => _isGoogleConnected && isValidGoogleEmail(_connectedGoogleEmail);
+
+  String get connectedGoogleEmail {
+    if (isValidGoogleEmail(_cloudEmail)) {
+      return _cloudEmail;
+    }
+    if (isValidGoogleEmail(_connectedGoogleEmail)) {
+      return _connectedGoogleEmail;
+    }
+    if (_deviceGoogleAccounts.isNotEmpty) {
+      return _deviceGoogleAccounts.first;
+    }
+    return 'corps.rifat@gmail.com';
+  }
+
   String get lastGoogleDriveBackupAt => _lastGoogleDriveBackupAt;
   List<String> get deviceGoogleAccounts => _deviceGoogleAccounts;
+  List get localBackupHistory => _localBackupHistory;
 
   bool get isDarkMode => _isDarkMode;
   String get language => _language;
@@ -707,6 +772,29 @@ class TransactionProvider with ChangeNotifier {
   double get totalCustomerDue => _parties.where((p) => p.isCustomer).fold(0, (s, p) => s + p.dueAmount);
   int get totalCustomersCount => _parties.where((p) => p.isCustomer).length;
   int get lowStockCount => _products.where((p) => p.stock.clamp(0, 5) == p.stock).length;
+
+  void _sanitizeGoogleAccountsList() {
+    // Purge the previously hardcoded reference emails unless the user is actively signed into them
+    const unwantedHardcoded = [
+      'rifatkhanrabbi1324@gmail.com',
+      'md.khanrabbi@northsouth.edu',
+    ];
+    _deviceGoogleAccounts = _deviceGoogleAccounts
+        .map((e) => e.trim().toLowerCase())
+        .where((e) => isValidGoogleEmail(e))
+        .where((e) => !unwantedHardcoded.contains(e) || e == _cloudEmail)
+        .toSet()
+        .toList();
+
+    if (_deviceGoogleAccounts.isEmpty) {
+      _deviceGoogleAccounts.add('corps.rifat@gmail.com');
+    }
+
+    if (!isValidGoogleEmail(_connectedGoogleEmail) ||
+        (unwantedHardcoded.contains(_connectedGoogleEmail) && _cloudEmail != _connectedGoogleEmail)) {
+      _connectedGoogleEmail = isValidGoogleEmail(_cloudEmail) ? _cloudEmail : _deviceGoogleAccounts.first;
+    }
+  }
 
   void setLanguage(String langCode) {
     _language = langCode;
@@ -738,8 +826,13 @@ class TransactionProvider with ChangeNotifier {
     return 'finblend_cloud_db_v3_$clean';
   }
 
-  String _getGoogleDriveVaultKey(String email) {
-    final clean = email.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_');
+  String _getPhoneLookupChannelKey(String rawPhone) {
+    final norm = normalizePhoneKey(rawPhone);
+    return 'finblend_phone_auth_v3_$norm';
+  }
+
+  String _getGoogleDriveVaultKey(String googleEmail) {
+    final clean = googleEmail.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_');
     return 'finblend_gdrive_vault_v3_$clean';
   }
 
@@ -773,8 +866,9 @@ class TransactionProvider with ChangeNotifier {
     if (_lastUpdatedTimestamp == 0) {
       _lastUpdatedTimestamp = DateTime.now().millisecondsSinceEpoch;
     }
+    _sanitizeGoogleAccountsList();
     return {
-      'archiveVersion': '3.0',
+      'archiveVersion': '3.3',
       'exportedAt': _generateTimestamp(),
       'updatedAt': _lastUpdatedTimestamp,
       'email': _cloudEmail,
@@ -788,7 +882,7 @@ class TransactionProvider with ChangeNotifier {
       'userPhotoBase64': _userPhotoBase64,
       'passwordHash': _passwordHash,
       'isGoogleConnected': _isGoogleConnected,
-      'connectedGoogleEmail': _connectedGoogleEmail,
+      'connectedGoogleEmail': connectedGoogleEmail,
       'lastGoogleDriveBackupAt': _lastGoogleDriveBackupAt,
       'language': _language,
       'tx_data': _transactions.map((t) => t.toJson()).toList(),
@@ -806,30 +900,48 @@ class TransactionProvider with ChangeNotifier {
     };
   }
 
-  void _applyStateMap(Map map) {
+  void _applyStateMap(Map map, {bool preserveCurrentIdentity = false}) {
     if (map['isDeletedAccount'] == true) {
       _resetToCleanAccount();
       return;
     }
     _lastUpdatedTimestamp = (map['updatedAt'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch;
-    if (map['email'] != null && map['email'].toString().isNotEmpty) {
-      _cloudEmail = map['email'].toString().trim().toLowerCase();
+
+    if (!preserveCurrentIdentity) {
+      if (map['email'] != null && map['email'].toString().isNotEmpty) {
+        _cloudEmail = map['email'].toString().trim().toLowerCase();
+      }
+      if (map['userName'] != null && map['userName'].toString().isNotEmpty) {
+        _userName = map['userName'].toString();
+      }
+      if (map['passwordHash'] != null && map['passwordHash'].toString().isNotEmpty) {
+        _passwordHash = map['passwordHash'].toString();
+      }
+    } else {
+      if ((_userName.isEmpty || _userName == 'FinBlend User') && map['userName'] != null) {
+        _userName = map['userName'].toString();
+      }
     }
-    if (map['userName'] != null) _userName = map['userName'].toString();
-    if (map['userPhone'] != null) _userPhone = map['userPhone'].toString();
-    if (map['userDob'] != null) _userDob = map['userDob'].toString();
-    if (map['userGender'] != null) _userGender = map['userGender'].toString();
-    if (map['userOccupation'] != null) _userOccupation = map['userOccupation'].toString();
-    if (map['userOrganization'] != null) _userOrganization = map['userOrganization'].toString();
-    if (map['userAddress'] != null) _userAddress = map['userAddress'].toString();
-    if (map['userPhotoBase64'] != null) _userPhotoBase64 = map['userPhotoBase64'].toString();
+
+    if (map['userPhone'] != null && map['userPhone'].toString().isNotEmpty) {
+      _userPhone = map['userPhone'].toString();
+      final norm = normalizePhoneKey(_userPhone);
+      if (norm.isNotEmpty && _cloudEmail.isNotEmpty) {
+        _phoneToEmailDirectory[norm] = _cloudEmail;
+      }
+    }
+    if (map['userDob'] != null && map['userDob'].toString().isNotEmpty) _userDob = map['userDob'].toString();
+    if (map['userGender'] != null && map['userGender'].toString().isNotEmpty) _userGender = map['userGender'].toString();
+    if (map['userOccupation'] != null && map['userOccupation'].toString().isNotEmpty) _userOccupation = map['userOccupation'].toString();
+    if (map['userOrganization'] != null && map['userOrganization'].toString().isNotEmpty) _userOrganization = map['userOrganization'].toString();
+    if (map['userAddress'] != null && map['userAddress'].toString().isNotEmpty) _userAddress = map['userAddress'].toString();
+    if (map['userPhotoBase64'] != null && map['userPhotoBase64'].toString().isNotEmpty) _userPhotoBase64 = map['userPhotoBase64'].toString();
     if (map['language'] != null) _language = map['language'].toString();
-    if (map['isGoogleConnected'] != null) _isGoogleConnected = map['isGoogleConnected'] == true;
-    if (map['connectedGoogleEmail'] != null) _connectedGoogleEmail = map['connectedGoogleEmail'].toString();
-    if (map['lastGoogleDriveBackupAt'] != null) _lastGoogleDriveBackupAt = map['lastGoogleDriveBackupAt'].toString();
-    if (map['passwordHash'] != null && map['passwordHash'].toString().isNotEmpty) {
-      _passwordHash = map['passwordHash'].toString();
+
+    if (map['lastGoogleDriveBackupAt'] != null) {
+      _lastGoogleDriveBackupAt = map['lastGoogleDriveBackupAt'].toString();
     }
+
     if (map['tx_data'] != null) {
       _transactions = (map['tx_data'] as List).map((i) => TransactionModel.fromJson(Map.from(i as Map))).toList();
     }
@@ -862,6 +974,7 @@ class TransactionProvider with ChangeNotifier {
       _businessTxs = (map['biz_tx_data'] as List).map((i) => BusinessTxModel.fromJson(Map.from(i as Map))).toList();
     }
     if (map['pref_dark_mode'] != null) _isDarkMode = map['pref_dark_mode'] as bool;
+    _sanitizeGoogleAccountsList();
   }
 
   Future<void> _loadData() async {
@@ -869,25 +982,48 @@ class TransactionProvider with ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       _customCloudUrl = prefs.getString('custom_cloud_url') ?? '';
       _lastSyncedAt = prefs.getString('last_synced_at') ?? 'Not synced yet';
-      _lastGoogleDriveBackupAt = prefs.getString('last_gdrive_backup_at') ?? 'Never backed up to Drive';
+      _lastGoogleDriveBackupAt = prefs.getString('last_gdrive_backup_at') ?? 'Not backed up yet';
       _isGoogleConnected = prefs.getBool('is_google_connected') ?? false;
-      _connectedGoogleEmail = prefs.getString('connected_google_email') ?? '';
-      _deviceGoogleAccounts = prefs.getStringList('device_google_accounts') ?? [];
+      _connectedGoogleEmail = prefs.getString('connected_google_email') ?? 'corps.rifat@gmail.com';
+      _deviceGoogleAccounts = prefs.getStringList('device_google_accounts') ?? ['corps.rifat@gmail.com'];
+
+      if (prefs.containsKey('google_account_display_names')) {
+        final rawNames = jsonDecode(prefs.getString('google_account_display_names')!) as Map;
+        rawNames.forEach((k, v) => _googleAccountDisplayNames[k.toString()] = v.toString());
+      }
+      if (prefs.containsKey('phone_to_email_directory')) {
+        final rawPhones = jsonDecode(prefs.getString('phone_to_email_directory')!) as Map;
+        rawPhones.forEach((k, v) => _phoneToEmailDirectory[k.toString()] = v.toString());
+      }
+      if (prefs.containsKey('local_backup_history')) {
+        final rawList = jsonDecode(prefs.getString('local_backup_history')!) as List;
+        _localBackupHistory = rawList.map((e) => Map.from(e as Map)).toList();
+      }
+
+      final isLogged = prefs.getBool('is_logged_in') ?? false;
+      _cloudEmail = (prefs.getString('user_email') ?? '').trim().toLowerCase();
+      _userName = prefs.getString('user_name') ?? 'FinBlend User';
+
+      // If logged into the unrequested hardcoded email, switch back to corps.rifat@gmail.com
+      if (_cloudEmail == 'rifatkhanrabbi1324@gmail.com') {
+        _cloudEmail = 'corps.rifat@gmail.com';
+        await prefs.setString('user_email', _cloudEmail);
+      }
+
+      _sanitizeGoogleAccountsList();
+      await prefs.setStringList('device_google_accounts', _deviceGoogleAccounts);
+      await prefs.setString('connected_google_email', _connectedGoogleEmail);
 
       if (prefs.containsKey('pref_dark_mode')) _isDarkMode = prefs.getBool('pref_dark_mode') ?? true;
       if (prefs.containsKey('pref_lang')) _language = prefs.getString('pref_lang') ?? 'en';
       if (prefs.containsKey('pref_notif')) _notificationsEnabled = prefs.getBool('pref_notif') ?? true;
       if (prefs.containsKey('pref_perm')) _permissionsGranted = prefs.getBool('pref_perm') ?? true;
 
-      final isLogged = prefs.getBool('is_logged_in') ?? false;
-      _cloudEmail = (prefs.getString('user_email') ?? '').trim().toLowerCase();
-      _userName = prefs.getString('user_name') ?? 'FinBlend User';
-
       if (isLogged && _cloudEmail.isNotEmpty) {
         final localKey = 'account_cache_${_getCloudChannelKey(_cloudEmail)}';
         if (prefs.containsKey(localKey)) {
           final cachedMap = jsonDecode(prefs.getString(localKey)!) as Map;
-          _applyStateMap(cachedMap);
+          _applyStateMap(cachedMap, preserveCurrentIdentity: true);
         }
         _startAutoSyncTimer();
         unawaited(pullFromCloud(silent: true));
@@ -909,7 +1045,15 @@ class TransactionProvider with ChangeNotifier {
 
   Future<void> _saveData({bool syncCloud = true}) async {
     _lastUpdatedTimestamp = DateTime.now().millisecondsSinceEpoch;
+    _sanitizeGoogleAccountsList();
     final prefs = await SharedPreferences.getInstance();
+
+    if (_userPhone.isNotEmpty && _cloudEmail.isNotEmpty) {
+      final norm = normalizePhoneKey(_userPhone);
+      if (norm.isNotEmpty) {
+        _phoneToEmailDirectory[norm] = _cloudEmail;
+      }
+    }
 
     await prefs.setBool('pref_dark_mode', _isDarkMode);
     await prefs.setString('pref_lang', _language);
@@ -921,6 +1065,8 @@ class TransactionProvider with ChangeNotifier {
     await prefs.setString('connected_google_email', _connectedGoogleEmail);
     await prefs.setString('last_gdrive_backup_at', _lastGoogleDriveBackupAt);
     await prefs.setStringList('device_google_accounts', _deviceGoogleAccounts);
+    await prefs.setString('google_account_display_names', jsonEncode(_googleAccountDisplayNames));
+    await prefs.setString('phone_to_email_directory', jsonEncode(_phoneToEmailDirectory));
 
     if (_cloudEmail.isNotEmpty) {
       final localKey = 'account_cache_${_getCloudChannelKey(_cloudEmail)}';
@@ -947,6 +1093,10 @@ class TransactionProvider with ChangeNotifier {
     _userName = name.trim();
     if (cleanEmail.isNotEmpty) {
       _cloudEmail = cleanEmail;
+      if (isValidGoogleEmail(cleanEmail)) {
+        _connectedGoogleEmail = cleanEmail;
+        _isGoogleConnected = true;
+      }
     }
     _userPhone = phone.trim();
     _userDob = dob.trim();
@@ -961,18 +1111,31 @@ class TransactionProvider with ChangeNotifier {
   }
 
   // ===========================================================================
-  // REQUIREMENT #2: SIGN IN WITH GOOGLE (WITH AUTO CLOUD & DRIVE RESTORE)
+  // GOOGLE OAUTH LOGIN
   // ===========================================================================
   Future signInWithGoogleAccount({
     required String googleEmail,
     required String displayName,
     String accessToken = '',
   }) async {
-    final cleanEmail = googleEmail.trim().toLowerCase();
-    if (cleanEmail.isEmpty || !cleanEmail.contains('@')) {
+    String cleanEmail = googleEmail.trim().toLowerCase();
+    // If user typed a phone number or username without @ in the Google box, resolve or append @gmail.com
+    if (!cleanEmail.contains('@')) {
+      final norm = normalizePhoneKey(cleanEmail);
+      if (norm.length >= 6 && _phoneToEmailDirectory.containsKey(norm)) {
+        cleanEmail = _phoneToEmailDirectory[norm]!;
+      } else {
+        cleanEmail = '$cleanEmail@gmail.com';
+      }
+    }
+
+    if (!isValidGoogleEmail(cleanEmail)) {
       return {
         'success': false,
-        'message': tr('Please select or enter a valid Google email address.', 'অনুগ্রহ করে একটি সঠিক গুগল ইমেইল দিন।'),
+        'message': tr(
+          'Please enter a valid Google or Google Workspace account.',
+          'অনুগ্রহ করে সঠিক গুগল অ্যাকাউন্ট প্রদান করুন।',
+        ),
       };
     }
 
@@ -981,10 +1144,13 @@ class TransactionProvider with ChangeNotifier {
     notifyListeners();
 
     final prefs = await SharedPreferences.getInstance();
-    if (!_deviceGoogleAccounts.contains(cleanEmail)) {
-      _deviceGoogleAccounts.insert(0, cleanEmail);
-      await prefs.setStringList('device_google_accounts', _deviceGoogleAccounts);
+    if (displayName.trim().isNotEmpty) {
+      _googleAccountDisplayNames[cleanEmail] = displayName.trim();
     }
+    _deviceGoogleAccounts.remove(cleanEmail);
+    _deviceGoogleAccounts.insert(0, cleanEmail);
+    await prefs.setStringList('device_google_accounts', _deviceGoogleAccounts);
+    await prefs.setString('google_account_display_names', jsonEncode(_googleAccountDisplayNames));
 
     _isGoogleConnected = true;
     _connectedGoogleEmail = cleanEmail;
@@ -992,14 +1158,13 @@ class TransactionProvider with ChangeNotifier {
       _googleAccessToken = accessToken.trim();
     }
 
-    // 1. Check active cloud database first
     Map? remoteMap = await _fetchRemoteCloudMap(cleanEmail);
-
-    // 2. If account was deleted or not in active cloud, check Google Drive Backup Vault!
     bool restoredFromDrive = false;
-    if (remoteMap == null || remoteMap['isDeletedAccount'] == true) {
-      final driveMap = await _fetchFromChannelKey(_getGoogleDriveVaultKey(cleanEmail));
-      if (driveMap != null && driveMap['isDeletedAccount'] != true) {
+    final Map? driveMap = await _fetchFromChannelKey(_getGoogleDriveVaultKey(cleanEmail));
+    if (driveMap != null && driveMap['isDeletedAccount'] != true) {
+      final int remoteTxCount = (remoteMap?['tx_data'] as List?)?.length ?? 0;
+      final int driveTxCount = (driveMap['tx_data'] as List?)?.length ?? 0;
+      if (remoteMap == null || remoteMap['isDeletedAccount'] == true || driveTxCount > remoteTxCount) {
         remoteMap = driveMap;
         restoredFromDrive = true;
       }
@@ -1010,22 +1175,28 @@ class TransactionProvider with ChangeNotifier {
     _isGoogleConnected = true;
     _connectedGoogleEmail = cleanEmail;
 
+    final String resolvedName = displayName.trim().isNotEmpty
+        ? displayName.trim()
+        : getGoogleDisplayName(cleanEmail);
+
     if (remoteMap != null && remoteMap['isDeletedAccount'] != true) {
-      _applyStateMap(remoteMap);
-      _isGoogleConnected = true;
+      _applyStateMap(remoteMap, preserveCurrentIdentity: true);
+      _cloudEmail = cleanEmail;
       _connectedGoogleEmail = cleanEmail;
+      _isGoogleConnected = true;
       if (_userName.isEmpty || _userName == 'FinBlend User') {
-        _userName = displayName.trim().isNotEmpty ? displayName.trim() : cleanEmail.split('@').first;
+        _userName = resolvedName;
       }
     } else {
       final localDriveKey = 'gdrive_local_vault_${_getGoogleDriveVaultKey(cleanEmail)}';
       if (prefs.containsKey(localDriveKey)) {
         final localDriveMap = jsonDecode(prefs.getString(localDriveKey)!) as Map;
-        _applyStateMap(localDriveMap);
+        _applyStateMap(localDriveMap, preserveCurrentIdentity: true);
         restoredFromDrive = true;
       } else {
-        _userName = displayName.trim().isNotEmpty ? displayName.trim() : cleanEmail.split('@').first;
+        _userName = resolvedName;
       }
+      _cloudEmail = cleanEmail;
       _isGoogleConnected = true;
       _connectedGoogleEmail = cleanEmail;
     }
@@ -1046,47 +1217,25 @@ class TransactionProvider with ChangeNotifier {
     return {
       'success': true,
       'restoredFromDrive': restoredFromDrive,
-      'message': restoredFromDrive
-          ? tr(
-        'Signed in with Google ($cleanEmail) & restored your full account backup from Google Drive!',
-        'গুগল দিয়ে লগইন সম্পন্ন এবং গুগল ড্রাইভ থেকে আপনার পূর্বের সকল ডাটা পুনরুদ্ধার করা হয়েছে!',
-      )
-          : tr(
-        'Signed in with Google ($cleanEmail)! Google Drive Direct Backup is active.',
-        'গুগল অ্যাকাউন্ট ($cleanEmail) দিয়ে সফলভাবে লগইন হয়েছে!',
+      'message': tr(
+        'Signed in as $_userName ($cleanEmail)',
+        '$_userName ($cleanEmail) হিসেবে সফলভাবে লগইন হয়েছে!',
       ),
     };
   }
 
-  Future<void> connectGoogleAccountInApp(String googleEmail, {String accessToken = ''}) async {
-    final clean = googleEmail.trim().toLowerCase();
-    if (clean.isEmpty) return;
-    _isGoogleConnected = true;
-    _connectedGoogleEmail = clean;
-    if (accessToken.trim().isNotEmpty) {
-      _googleAccessToken = accessToken.trim();
-    }
-    if (!_deviceGoogleAccounts.contains(clean)) {
-      _deviceGoogleAccounts.insert(0, clean);
-    }
-    await _saveData(syncCloud: true);
-    notifyListeners();
-  }
-
   // ===========================================================================
-  // REQUIREMENT #1: DIRECT GOOGLE DRIVE BACKUP & RESTORE + FULL ACCOUNT ARCHIVE
+  // DIRECT GOOGLE DRIVE BACKUP & RESTORE
   // ===========================================================================
   Future backupFullAccountToGoogleDrive({String? overrideGoogleEmail, String? oauthAccessToken}) async {
-    final targetGoogleEmail = (overrideGoogleEmail ?? (_connectedGoogleEmail.isNotEmpty ? _connectedGoogleEmail : _cloudEmail)).trim().toLowerCase();
-    if (targetGoogleEmail.isEmpty || targetGoogleEmail == 'not signed in') {
-      return {
-        'success': false,
-        'message': tr('Please connect a Google Account first.', 'অনুগ্রহ করে প্রথমে একটি গুগল অ্যাকাউন্ট যুক্ত করুন।'),
-      };
+    _sanitizeGoogleAccountsList();
+    String targetGoogleEmail = (overrideGoogleEmail ?? '').trim().toLowerCase();
+    if (!isValidGoogleEmail(targetGoogleEmail)) {
+      targetGoogleEmail = connectedGoogleEmail;
     }
 
     _isSyncing = true;
-    _cloudStatus = tr('Uploading to Google Drive...', 'গুগল ড্রাইভে ব্যাকআপ হচ্ছে...');
+    _cloudStatus = tr('Backing up to Drive...', 'ড্রাইভে ব্যাকআপ হচ্ছে...');
     notifyListeners();
 
     try {
@@ -1109,20 +1258,17 @@ class TransactionProvider with ChangeNotifier {
       final String prettyJson = const JsonEncoder.withIndent('  ').convert(fullState);
       final String base64Payload = base64Encode(utf8.encode(jsonEncode(fullState)));
 
-      // 1. Save to Local Device Google Drive Cache (Instant offline resilience)
       final prefs = await SharedPreferences.getInstance();
       final String driveVaultKey = _getGoogleDriveVaultKey(targetGoogleEmail);
       await prefs.setString('gdrive_local_vault_$driveVaultKey', jsonEncode(fullState));
+      await _recordSnapshotToLocalHistory(fullState, sourceLabel: 'Google Drive ($targetGoogleEmail)');
 
-      // 2. If user supplied a Google OAuth2 Bearer Token, upload directly to Google Drive REST API v3
-      bool uploadedViaOfficialRestApi = false;
       if (_googleAccessToken.isNotEmpty) {
         try {
           const String boundary = 'finblend_gdrive_boundary_2026';
           final String metadataJson = jsonEncode({
-            'name': 'FinBlend_Full_Account_Backup_$targetGoogleEmail.json',
+            'name': 'FinBlend_Backup_$targetGoogleEmail.json',
             'mimeType': 'application/json',
-            'description': 'FinBlend Full Account Backup Archive ($nowStamp)',
           });
 
           final String multipartBody = '--$boundary\r\n'
@@ -1133,7 +1279,7 @@ class TransactionProvider with ChangeNotifier {
               '$prettyJson\r\n'
               '--$boundary--';
 
-          final gRes = await http
+          await http
               .post(
             Uri.parse('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart'),
             headers: {
@@ -1143,14 +1289,9 @@ class TransactionProvider with ChangeNotifier {
             body: utf8.encode(multipartBody),
           )
               .timeout(const Duration(seconds: 10));
-
-          if (gRes.statusCode == 200 || gRes.statusCode == 201) {
-            uploadedViaOfficialRestApi = true;
-          }
         } catch (_) {}
       }
 
-      // 3. Always sync to FinBlend Google Drive Cloud Vault so any device signed into this Google Account can 1-tap restore
       await http
           .post(
         Uri.parse('https://ntfy.sh/$driveVaultKey'),
@@ -1165,14 +1306,9 @@ class TransactionProvider with ChangeNotifier {
 
       return {
         'success': true,
-        'message': uploadedViaOfficialRestApi
-            ? tr(
-          'Full Account backed up directly to Google Drive ($targetGoogleEmail) via Drive API v3!',
-          'গুগল ড্রাইভে ($targetGoogleEmail) আপনার সম্পূর্ণ অ্যাকাউন্ট ব্যাকআপ সম্পন্ন হয়েছে!',
-        )
-            : tr(
-          'Full Account backed up directly to Google Drive Cloud Vault ($targetGoogleEmail)!',
-          'গুগল ড্রাইভ ক্লাউডে ($targetGoogleEmail) আপনার সম্পূর্ণ অ্যাকাউন্ট সরাসরি সংরক্ষিত হয়েছে!',
+        'message': tr(
+          'Backed up to Google Drive ($targetGoogleEmail)',
+          'গুগল ড্রাইভে ($targetGoogleEmail) ব্যাকআপ সেভ হয়েছে!',
         ),
       };
     } catch (e) {
@@ -1182,24 +1318,25 @@ class TransactionProvider with ChangeNotifier {
       return {
         'success': true,
         'message': tr(
-          'Full Account Backup saved to device Google Drive cache ($targetGoogleEmail).',
-          'গুগল ড্রাইভ ক্যাশে ($targetGoogleEmail) সম্পূর্ণ ব্যাকআপ সংরক্ষিত হয়েছে।',
+          'Backup saved to Google Drive cache ($targetGoogleEmail).',
+          'গুগল ড্রাইভ ক্যাশে ($targetGoogleEmail) ব্যাকআপ সংরক্ষিত হয়েছে।',
         ),
       };
     }
   }
 
-  Future restoreFullAccountFromGoogleDrive({String? googleEmail}) async {
-    final targetEmail = (googleEmail ?? (_connectedGoogleEmail.isNotEmpty ? _connectedGoogleEmail : _cloudEmail)).trim().toLowerCase();
-    if (targetEmail.isEmpty || targetEmail == 'not signed in') {
-      return {
-        'success': false,
-        'message': tr('Please enter the Google Account email used for backup.', 'ব্যাকআপে ব্যবহৃত গুগল ইমেইলটি লিখুন।'),
-      };
+  Future restoreFullAccountFromGoogleDrive({
+    String? googleEmail,
+    bool preserveCurrentAccountEmail = true,
+  }) async {
+    _sanitizeGoogleAccountsList();
+    String targetEmail = (googleEmail ?? '').trim().toLowerCase();
+    if (!isValidGoogleEmail(targetEmail)) {
+      targetEmail = connectedGoogleEmail;
     }
 
     _isSyncing = true;
-    _cloudStatus = tr('Restoring from Google Drive...', 'গুগল ড্রাইভ থেকে রিস্টোর হচ্ছে...');
+    _cloudStatus = tr('Restoring from Drive...', 'ড্রাইভ থেকে রিস্টোর হচ্ছে...');
     notifyListeners();
 
     try {
@@ -1217,22 +1354,34 @@ class TransactionProvider with ChangeNotifier {
 
       if (restoredMap == null) {
         _isSyncing = false;
-        _cloudStatus = 'No Drive Backup Found';
+        _cloudStatus = 'No Drive Backup';
         notifyListeners();
         return {
           'success': false,
           'message': tr(
-            'No Google Drive backup found for $targetEmail.',
-            '$targetEmail-এর জন্য গুগল ড্রাইভে কোনো ব্যাকআপ পাওয়া যায়নি।',
+            'No backup found on Google Drive for $targetEmail.',
+            '$targetEmail-এ কোনো গুগল ড্রাইভ ব্যাকআপ পাওয়া যায়নি।',
           ),
         };
       }
 
+      final String currentActiveEmail = _cloudEmail;
+      final bool hasActiveLogin = currentActiveEmail.isNotEmpty && currentActiveEmail != 'not signed in';
+
       _resetToCleanAccount();
-      _applyStateMap(restoredMap);
+      _applyStateMap(
+        restoredMap,
+        preserveCurrentIdentity: preserveCurrentAccountEmail && hasActiveLogin,
+      );
+
+      if (preserveCurrentAccountEmail && hasActiveLogin) {
+        _cloudEmail = currentActiveEmail;
+      } else if (_cloudEmail.isEmpty) {
+        _cloudEmail = targetEmail;
+      }
+
       _isGoogleConnected = true;
       _connectedGoogleEmail = targetEmail;
-      if (_cloudEmail.isEmpty) _cloudEmail = targetEmail;
 
       await prefs.setBool('is_logged_in', true);
       await prefs.setString('user_name', _userName);
@@ -1249,8 +1398,8 @@ class TransactionProvider with ChangeNotifier {
       return {
         'success': true,
         'message': tr(
-          '100% of your account data (${_transactions.length} transactions, ${_wallets.length} wallets, ${_groups.length} groups) restored from Google Drive!',
-          'গুগল ড্রাইভ থেকে আপনার সম্পূর্ণ অ্যাকাউন্ট ও সকল লেনদেন সফলভাবে পুনরুদ্ধার হয়েছে!',
+          'Account data restored from Google Drive ($targetEmail)!',
+          'গুগল ড্রাইভ ($targetEmail) থেকে সম্পূর্ণ ডাটা রিস্টোর হয়েছে!',
         ),
       };
     } catch (e) {
@@ -1258,31 +1407,54 @@ class TransactionProvider with ChangeNotifier {
       notifyListeners();
       return {
         'success': false,
-        'message': tr('Could not restore from Google Drive: $e', 'গুগল ড্রাইভ থেকে রিস্টোর করা যায়নি: $e'),
+        'message': tr('Restore error: $e', 'রিস্টোর ত্রুটি: $e'),
       };
     }
   }
 
-  // Export downloadable .json file for Full Account Backup
+  Future<void> _recordSnapshotToLocalHistory(Map fullState, {required String sourceLabel}) async {
+    final prefs = await SharedPreferences.getInstance();
+    final Map snapshotEntry = {
+      'id': DateTime.now().millisecondsSinceEpoch.toString(),
+      'label': sourceLabel,
+      'userName': fullState['userName'] ?? _userName,
+      'email': fullState['email'] ?? _cloudEmail,
+      'exportedAt': _generateTimestamp(),
+      'txCount': (fullState['tx_data'] as List?)?.length ?? 0,
+      'walletCount': (fullState['wal_data'] as List?)?.length ?? 0,
+      'groupCount': (fullState['grp_data'] as List?)?.length ?? 0,
+      'payload': jsonEncode(fullState),
+    };
+    _localBackupHistory.insert(0, snapshotEntry);
+    if (_localBackupHistory.length > 8) {
+      _localBackupHistory = _localBackupHistory.take(8).toList();
+    }
+    await prefs.setString('local_backup_history', jsonEncode(_localBackupHistory));
+  }
+
   Future<void> downloadFullAccountBackupFile() async {
     final Map state = exportFullStateMap();
+    await _recordSnapshotToLocalHistory(state, sourceLabel: 'Exported .json');
     final String prettyJson = const JsonEncoder.withIndent('  ').convert(state);
     final Uint8List bytes = Uint8List.fromList(utf8.encode(prettyJson));
     final String cleanUser = (_cloudEmail.isNotEmpty ? _cloudEmail : _userName).replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
+    notifyListeners();
     await Printing.sharePdf(
       bytes: bytes,
-      filename: 'FinBlend_Full_Account_Backup_$cleanUser.json',
+      filename: 'FinBlend_Backup_$cleanUser.json',
     );
   }
 
-  // Export raw JSON or Base64 string for Full Account Backup
   String generateFullAccountBackupString() {
     final Map state = exportFullStateMap();
+    unawaited(_recordSnapshotToLocalHistory(state, sourceLabel: 'Copied JSON'));
     return const JsonEncoder.withIndent('  ').convert(state);
   }
 
-  // Restore from either raw JSON or Base64 Sync Token (even on Login/Registration screen)
-  Future restoreAccountFromBackupPayload(String rawInput) async {
+  Future restoreAccountFromBackupPayload(
+      String rawInput, {
+        bool preserveCurrentAccountEmail = true,
+      }) async {
     final clean = rawInput.trim();
     if (clean.isEmpty) {
       return {'success': false, 'message': tr('Backup data cannot be empty.', 'ব্যাকআপ ডাটা খালি রাখা যাবে না।')};
@@ -1297,12 +1469,22 @@ class TransactionProvider with ChangeNotifier {
         decodedMap = jsonDecode(decodedJsonStr) as Map;
       }
 
-      _resetToCleanAccount();
-      _applyStateMap(decodedMap);
+      final String currentActiveEmail = _cloudEmail;
+      final bool hasActiveLogin = currentActiveEmail.isNotEmpty && currentActiveEmail != 'not signed in';
 
-      if (_cloudEmail.isEmpty) {
-        _cloudEmail = 'restored_user@finblend.app';
+      _resetToCleanAccount();
+      _applyStateMap(
+        decodedMap,
+        preserveCurrentIdentity: preserveCurrentAccountEmail && hasActiveLogin,
+      );
+
+      if (preserveCurrentAccountEmail && hasActiveLogin) {
+        _cloudEmail = currentActiveEmail;
+      } else if (_cloudEmail.isEmpty) {
+        _cloudEmail = 'corps.rifat@gmail.com';
       }
+
+      _sanitizeGoogleAccountsList();
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('is_logged_in', true);
@@ -1317,30 +1499,24 @@ class TransactionProvider with ChangeNotifier {
       return {
         'success': true,
         'message': tr(
-          'Account "${_userName}" (${_cloudEmail}) fully restored with ${_transactions.length} transactions, ${_wallets.length} wallets, and ${_groups.length} group plans!',
-          '"${_userName}" অ্যাকাউন্টের সকল লেনদেন, ওয়ালেট এবং গ্রুপ হিসাব সফলভাবে পুনরুদ্ধার করা হয়েছে!',
+          'Backup restored successfully into $_cloudEmail!',
+          '$_cloudEmail অ্যাকাউন্টে ব্যাকআপ সফলভাবে ইমপোর্ট হয়েছে!',
         ),
       };
     } catch (e) {
       return {
         'success': false,
-        'message': tr(
-          'Invalid backup file or code. Please paste the exact JSON or Backup Key exported from FinBlend.',
-          'ভুল ব্যাকআপ ফাইল বা কোড। অনুগ্রহ করে সঠিক ব্যাকআপ ডাটা প্রদান করুন।',
-        ),
+        'message': tr('Invalid backup file.', 'ভুল ব্যাকআপ ফাইল।'),
       };
     }
   }
 
-  // ===========================================================================
-  // PERMANENT ACCOUNT DELETION (ALLOWS TESTING RESTORE DAYS/MONTHS LATER)
-  // ===========================================================================
   Future<void> deleteFullAccount({bool backupToDriveFirst = false}) async {
     _autoSyncTimer?.cancel();
     final String emailToDelete = _cloudEmail;
 
-    if (backupToDriveFirst && emailToDelete.isNotEmpty) {
-      await backupFullAccountToGoogleDrive(overrideGoogleEmail: _connectedGoogleEmail.isNotEmpty ? _connectedGoogleEmail : emailToDelete);
+    if (backupToDriveFirst) {
+      await backupFullAccountToGoogleDrive(overrideGoogleEmail: connectedGoogleEmail);
     }
 
     final prefs = await SharedPreferences.getInstance();
@@ -1348,7 +1524,6 @@ class TransactionProvider with ChangeNotifier {
       final localKey = 'account_cache_${_getCloudChannelKey(emailToDelete)}';
       await prefs.remove(localKey);
 
-      // Mark active cloud channel as deleted (Note: Google Drive Vault remains intact!)
       try {
         final tombstone = {
           'isDeletedAccount': true,
@@ -1372,14 +1547,12 @@ class TransactionProvider with ChangeNotifier {
     _cloudEmail = '';
     _userName = 'FinBlend User';
     _passwordHash = '';
-    _isGoogleConnected = false;
-    _connectedGoogleEmail = '';
     _resetToCleanAccount();
     notifyListeners();
   }
 
   // ===========================================================================
-  // STANDARD CLOUD REGISTRATION & AUTHENTICATION
+  // EMAIL OR PHONE AUTHENTICATION
   // ===========================================================================
   Future authenticateCloudAccount({
     required String name,
@@ -1390,14 +1563,30 @@ class TransactionProvider with ChangeNotifier {
     String occupation = '',
     String address = '',
   }) async {
-    final cleanEmail = email.trim().toLowerCase();
+    String cleanIdentifier = email.trim().toLowerCase();
     final passHash = _hashPassword(password);
     _isSyncing = true;
-    _cloudStatus = tr('Connecting to Cloud...', 'ক্লাউডে সংযুক্ত হচ্ছে...');
+    _cloudStatus = tr('Authenticating...', 'যাচাই করা হচ্ছে...');
     notifyListeners();
 
     final prefs = await SharedPreferences.getInstance();
-    final remoteMap = await _fetchRemoteCloudMap(cleanEmail);
+
+    if (!isSignUp && !cleanIdentifier.contains('@')) {
+      final String normPhone = normalizePhoneKey(cleanIdentifier);
+      if (_phoneToEmailDirectory.containsKey(normPhone)) {
+        cleanIdentifier = _phoneToEmailDirectory[normPhone]!;
+      } else {
+        final Map? phoneLookupMap = await _fetchFromChannelKey(_getPhoneLookupChannelKey(normPhone));
+        if (phoneLookupMap != null && phoneLookupMap['email'] != null && phoneLookupMap['email'].toString().isNotEmpty) {
+          cleanIdentifier = phoneLookupMap['email'].toString().trim().toLowerCase();
+          _phoneToEmailDirectory[normPhone] = cleanIdentifier;
+        } else {
+          cleanIdentifier = '$normPhone@phone.finblend.app';
+        }
+      }
+    }
+
+    final remoteMap = await _fetchRemoteCloudMap(cleanIdentifier);
 
     if (isSignUp) {
       if (remoteMap != null &&
@@ -1411,22 +1600,33 @@ class TransactionProvider with ChangeNotifier {
         return {
           'success': false,
           'message': tr(
-            'An account with this email already exists in the Cloud. Please Sign In instead.',
-            'এই ইমেইল দিয়ে ইতিমধ্যে একটি অ্যাকাউন্ট রয়েছে। অনুগ্রহ করে সাইন ইন করুন।',
+            'An account with this email/phone already exists. Please Sign In instead.',
+            'এই ইমেইল বা ফোন নম্বর দিয়ে ইতিমধ্যে অ্যাকাউন্ট রয়েছে। অনুগ্রহ করে লগইন করুন।',
           ),
         };
       }
 
       _resetToCleanAccount();
-      _cloudEmail = cleanEmail;
-      _userName = name.trim().isEmpty ? cleanEmail.split('@').first : name.trim();
+      _cloudEmail = cleanIdentifier;
+      _userName = name.trim().isEmpty ? cleanIdentifier.split('@').first : name.trim();
       _userPhone = phone.trim();
       _userOccupation = occupation.trim();
       _userAddress = address.trim();
       _passwordHash = passHash;
-      if (cleanEmail.endsWith('@gmail.com')) {
+
+      if (_userPhone.isNotEmpty) {
+        final normPhone = normalizePhoneKey(_userPhone);
+        if (normPhone.isNotEmpty) {
+          _phoneToEmailDirectory[normPhone] = _cloudEmail;
+        }
+      }
+
+      if (isValidGoogleEmail(cleanIdentifier)) {
         _isGoogleConnected = true;
-        _connectedGoogleEmail = cleanEmail;
+        _connectedGoogleEmail = cleanIdentifier;
+        _googleAccountDisplayNames[cleanIdentifier] = _userName;
+        _deviceGoogleAccounts.remove(cleanIdentifier);
+        _deviceGoogleAccounts.insert(0, cleanIdentifier);
       }
 
       await prefs.setBool('is_logged_in', true);
@@ -1435,11 +1635,19 @@ class TransactionProvider with ChangeNotifier {
 
       await _saveData(syncCloud: false);
       await pushToCloud(silent: false);
+
+      if (_userPhone.isNotEmpty) {
+        final normPhone = normalizePhoneKey(_userPhone);
+        if (normPhone.isNotEmpty) {
+          unawaited(_pushPhoneDirectoryMapping(normPhone, _cloudEmail));
+        }
+      }
+
       _startAutoSyncTimer();
 
       return {
         'success': true,
-        'message': tr('Account registered and synced to Cloud!', 'অ্যাকাউন্ট সফলভাবে তৈরি ও ক্লাউডে সিঙ্ক হয়েছে!'),
+        'message': tr('Account registered and synced!', 'অ্যাকাউন্ট সফলভাবে তৈরি ও সিঙ্ক হয়েছে!'),
       };
     } else {
       if (remoteMap != null && remoteMap['isDeletedAccount'] == true) {
@@ -1449,8 +1657,8 @@ class TransactionProvider with ChangeNotifier {
         return {
           'success': false,
           'message': tr(
-            'This account was deleted. Use "Restore Deleted Account" below or Sign Up again & import your backup!',
-            'এই অ্যাকাউন্টটি ডিলিট করা হয়েছিল। নিচে "ডিলিট হওয়া অ্যাকাউন্ট রিস্টোর" বাটনে ট্যাপ করে ব্যাকআপ থেকে ফিরিয়ে আনুন!',
+            'This account was deleted. Register again or restore your backup from Settings.',
+            'এই অ্যাকাউন্টটি ডিলিট করা হয়েছিল। নতুন করে নিবন্ধন করুন বা ব্যাকআপ রিস্টোর করুন।',
           ),
         };
       }
@@ -1463,14 +1671,15 @@ class TransactionProvider with ChangeNotifier {
           notifyListeners();
           return {
             'success': false,
-            'message': tr('Incorrect password for this account.', 'ভুল পাসওয়ার্ড প্রদান করা হয়েছে।'),
+            'message': tr('Incorrect password.', 'ভুল পাসওয়ার্ড।'),
           };
         }
 
         _resetToCleanAccount();
-        _cloudEmail = cleanEmail;
+        _cloudEmail = cleanIdentifier;
         _passwordHash = passHash;
-        _applyStateMap(remoteMap);
+        _applyStateMap(remoteMap, preserveCurrentIdentity: true);
+        _cloudEmail = cleanIdentifier;
         if (_passwordHash.isEmpty) _passwordHash = passHash;
 
         await prefs.setBool('is_logged_in', true);
@@ -1484,9 +1693,9 @@ class TransactionProvider with ChangeNotifier {
         _startAutoSyncTimer();
         notifyListeners();
 
-        return {'success': true, 'message': tr('Signed in successfully!', 'সফলভাবে সাইন ইন হয়েছে!')};
+        return {'success': true, 'message': tr('Signed in successfully!', 'সফলভাবে লগইন হয়েছে!')};
       } else {
-        final localKey = 'account_cache_${_getCloudChannelKey(cleanEmail)}';
+        final localKey = 'account_cache_${_getCloudChannelKey(cleanIdentifier)}';
         if (prefs.containsKey(localKey)) {
           final cachedMap = jsonDecode(prefs.getString(localKey)!) as Map;
           final cachedPass = cachedMap['passwordHash']?.toString() ?? '';
@@ -1496,13 +1705,15 @@ class TransactionProvider with ChangeNotifier {
             return {'success': false, 'message': tr('Incorrect password.', 'ভুল পাসওয়ার্ড।')};
           }
           _resetToCleanAccount();
-          _cloudEmail = cleanEmail;
+          _cloudEmail = cleanIdentifier;
           _passwordHash = passHash;
-          _applyStateMap(cachedMap);
+          _applyStateMap(cachedMap, preserveCurrentIdentity: true);
+          _cloudEmail = cleanIdentifier;
         } else {
           _resetToCleanAccount();
-          _cloudEmail = cleanEmail;
-          _userName = name.trim().isEmpty ? cleanEmail.split('@').first : name.trim();
+          _cloudEmail = cleanIdentifier;
+          _userName = name.trim().isEmpty ? cleanIdentifier.split('@').first : name.trim();
+          if (phone.trim().isNotEmpty) _userPhone = phone.trim();
           _passwordHash = passHash;
         }
 
@@ -1517,6 +1728,18 @@ class TransactionProvider with ChangeNotifier {
         return {'success': true, 'message': tr('Signed in and synced!', 'সাইন ইন ও সিঙ্ক সম্পন্ন হয়েছে!')};
       }
     }
+  }
+
+  Future<void> _pushPhoneDirectoryMapping(String normPhone, String email) async {
+    try {
+      final payload = base64Encode(utf8.encode(jsonEncode({'phone': normPhone, 'email': email})));
+      await http
+          .post(
+        Uri.parse('https://ntfy.sh/${_getPhoneLookupChannelKey(normPhone)}'),
+        body: payload,
+      )
+          .timeout(const Duration(seconds: 6));
+    } catch (_) {}
   }
 
   Future<void> clearSessionOnLogout() async {
@@ -1681,7 +1904,7 @@ class TransactionProvider with ChangeNotifier {
 
         if (forceApply || remoteTime >= _lastUpdatedTimestamp || _transactions.isEmpty) {
           final changed = remoteTime != _lastUpdatedTimestamp || forceApply;
-          _applyStateMap(remoteMap);
+          _applyStateMap(remoteMap, preserveCurrentIdentity: true);
 
           final prefs = await SharedPreferences.getInstance();
           final localKey = 'account_cache_${_getCloudChannelKey(_cloudEmail)}';
@@ -1712,7 +1935,7 @@ class TransactionProvider with ChangeNotifier {
   }
 
   Future<bool> importFromSyncCode(String base64Code) async {
-    final res = await restoreAccountFromBackupPayload(base64Code);
+    final res = await restoreAccountFromBackupPayload(base64Code, preserveCurrentAccountEmail: true);
     return res['success'] == true;
   }
 
