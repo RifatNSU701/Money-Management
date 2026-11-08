@@ -203,7 +203,6 @@ class _ExportScreenState extends State<ExportScreen> {
   }
 
   void _showMinimalRestoreSheet(BuildContext context, TransactionProvider provider) {
-    final driveEmailCtrl = TextEditingController(text: provider.connectedGoogleEmail);
     final jsonBackupCtrl = TextEditingController();
     bool preserveCurrentLogin = true;
     bool isWorking = false;
@@ -244,101 +243,74 @@ class _ExportScreenState extends State<ExportScreen> {
                   value: preserveCurrentLogin,
                   onChanged: (v) => setSheetState(() => preserveCurrentLogin = v),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
 
-                // 1. GOOGLE DRIVE RESTORE
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: driveEmailCtrl,
-                        keyboardType: TextInputType.emailAddress,
-                        style: const TextStyle(color: Colors.white, fontSize: 13),
-                        decoration: InputDecoration(
-                          labelText: provider.tr('Google Drive Account', 'গুগল ড্রাইভ ইমেইল'),
-                          labelStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
-                          prefixIcon: const Icon(Icons.add_to_drive_rounded, color: Color(0xFF38BDF8), size: 18),
-                          filled: true,
-                          fillColor: const Color(0xFF0F172A),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0EA5E9),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      onPressed: isWorking
-                          ? null
-                          : () async {
-                        setSheetState(() => isWorking = true);
-                        final res = await provider.restoreFullAccountFromGoogleDrive(
-                          googleEmail: driveEmailCtrl.text.trim(),
-                          preserveCurrentAccountEmail: preserveCurrentLogin,
-                        );
-                        setSheetState(() => isWorking = false);
-                        if (ctx.mounted && res['success'] == true) Navigator.pop(ctx);
-                        if (mounted) {
-                          ScaffoldMessenger.of(this.context).showSnackBar(
-                            SnackBar(
-                              backgroundColor: res['success'] == true ? const Color(0xFF10B981) : const Color(0xFFEF4444),
-                              content: Text(res['message']?.toString() ?? ''),
-                            ),
-                          );
-                        }
-                      },
-                      child: Text(provider.tr('Pull Drive', 'ড্রাইভ রিস্টোর'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // 2. RECENT SAVED SNAPSHOTS ON DEVICE
-                if (provider.localBackupHistory.isNotEmpty) ...[
-                  Text(
-                    provider.tr('Recent Backups on Device', 'ডিভাইসে সংরক্ষিত ব্যাকআপ'),
-                    style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold),
+                // 1. GOOGLE DRIVE RESTORE (REQUIRES DEVICE GOOGLE ACCOUNT + PERMISSION)
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F172A),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFF334155)),
                   ),
-                  const SizedBox(height: 8),
-                  ...provider.localBackupHistory.take(2).map((item) => Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0F172A),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFF334155)),
-                    ),
-                    child: ListTile(
-                      dense: true,
-                      title: Text(
-                        '${item['userName']} • ${item['txCount']} Tx',
-                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.add_to_drive_rounded, color: Color(0xFF38BDF8), size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              provider.isGoogleConnected
+                                  ? '${provider.tr("Google Drive", "গুগল ড্রাইভ")}: ${provider.connectedGoogleEmail}'
+                                  : provider.tr(
+                                'Google Drive (Requires Device Google Account Permission)',
+                                'গুগল ড্রাইভ (ডিভাইসের গুগল অ্যাকাউন্টের অনুমতি প্রয়োজন)',
+                              ),
+                              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
                       ),
-                      subtitle: Text('${item['exportedAt']}', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
-                      trailing: TextButton(
-                        onPressed: () async {
-                          final res = await provider.restoreAccountFromBackupPayload(
-                            item['payload'].toString(),
+                      const SizedBox(height: 10),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0EA5E9),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        onPressed: isWorking
+                            ? null
+                            : () async {
+                          setSheetState(() => isWorking = true);
+                          final res = await provider.restoreFullAccountFromGoogleDrive(
                             preserveCurrentAccountEmail: preserveCurrentLogin,
                           );
+                          setSheetState(() => isWorking = false);
                           if (ctx.mounted && res['success'] == true) Navigator.pop(ctx);
                           if (mounted) {
                             ScaffoldMessenger.of(this.context).showSnackBar(
-                              SnackBar(backgroundColor: const Color(0xFF10B981), content: Text(res['message']?.toString() ?? '')),
+                              SnackBar(
+                                backgroundColor: res['success'] == true ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                                content: Text(res['message']?.toString() ?? ''),
+                              ),
                             );
                           }
                         },
-                        child: Text(provider.tr('Restore', 'রিস্টোর'), style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold)),
+                        icon: const Icon(Icons.cloud_download_outlined, size: 18),
+                        label: Text(
+                          provider.tr('Select Google Account & Restore from Drive', 'গুগল অ্যাকাউন্ট নির্বাচন করে ড্রাইভ থেকে রিস্টোর'),
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
                       ),
-                    ),
-                  )),
-                  const SizedBox(height: 8),
-                ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
 
-                // 3. PASTE JSON BACKUP
+                // 2. PASTE EXPORTED .JSON BACKUP CONTENT
                 TextField(
                   controller: jsonBackupCtrl,
                   maxLines: 2,
@@ -477,8 +449,17 @@ class _ExportScreenState extends State<ExportScreen> {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                '${provider.connectedGoogleEmail} • ${provider.lastGoogleDriveBackupAt}',
-                                style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                                provider.isGoogleConnected
+                                    ? 'Google Drive: ${provider.connectedGoogleEmail} • ${provider.lastGoogleDriveBackupAt}'
+                                    : provider.tr(
+                                  'Google Drive: Not connected (Tap Drive Backup to authorize)',
+                                  'গুগল ড্রাইভ: সংযুক্ত নয় (অনুমতি দিতে Drive Backup চাপুন)',
+                                ),
+                                style: TextStyle(
+                                  color: provider.isGoogleConnected ? const Color(0xFF10B981) : const Color(0xFF94A3B8),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ],
@@ -502,7 +483,6 @@ class _ExportScreenState extends State<ExportScreen> {
                     ),
                     const SizedBox(height: 14),
 
-                    // 3 COMPACT SUMMARY PILLS (INSTEAD OF WALL OF TEXT)
                     Row(
                       children: [
                         Expanded(
@@ -532,7 +512,6 @@ class _ExportScreenState extends State<ExportScreen> {
                     ),
                     const SizedBox(height: 14),
 
-                    // 3 CLEAN ACTION BUTTONS
                     Row(
                       children: [
                         Expanded(
@@ -547,14 +526,12 @@ class _ExportScreenState extends State<ExportScreen> {
                             onPressed: provider.isSyncing
                                 ? null
                                 : () async {
-                              final res = await provider.backupFullAccountToGoogleDrive(
-                                overrideGoogleEmail: provider.connectedGoogleEmail,
-                              );
+                              final res = await provider.backupFullAccountToGoogleDrive();
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
-                                    backgroundColor: const Color(0xFF10B981),
-                                    content: Text(res['message']?.toString() ?? 'Backed up!'),
+                                    backgroundColor: res['success'] == true ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                                    content: Text(res['message']?.toString() ?? ''),
                                   ),
                                 );
                               }

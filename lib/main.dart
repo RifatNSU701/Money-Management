@@ -176,7 +176,7 @@ class _AuthGateState extends State<AuthGate> {
 }
 
 // =============================================================================
-// ENTERPRISE LOGIN & REGISTRATION SCREEN
+// ENTERPRISE LOGIN & REGISTRATION SCREEN (OFFICIAL GOOGLE_SIGN_IN SDK)
 // =============================================================================
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -251,598 +251,107 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   // ===========================================================================
-  // AUTHENTIC GOOGLE OAUTH 2.0 MODAL (EXACT REPLICA OF REFERENCE SCREENSHOTS)
-  // Step 0: "Choose an account"
-  // Step 1: "Use another account" -> Single "Email or phone" field + "Forgot email?" + "Create account" + "Next"
-  // Step 2: Password verification -> Signs in & adds account to device list
+  // CALLS OFFICIAL GOOGLE_SIGN_IN SDK (ANDROID PLAY SERVICES / WEB OAUTH)
   // ===========================================================================
-  void _showGoogleOAuthChooserDialog(BuildContext context) {
+  Future<void> _handleNativeGoogleSignIn() async {
     final provider = context.read<TransactionProvider>();
-    final List<String> accounts = provider.deviceGoogleAccounts;
+    setState(() => _isLoading = true);
 
-    int step = 0; // 0 = Choose an account, 1 = Email or phone, 2 = Enter password
-    bool isAuthenticating = false;
-    bool showGooglePassword = false;
-    String authenticatingEmail = '';
-    String? inlineError;
+    final Map res = await provider.signInWithNativeGoogleOAuth();
 
-    final googleEmailOrPhoneCtrl = TextEditingController();
-    final googlePasswordCtrl = TextEditingController();
+    if (!mounted) return;
+    setState(() => _isLoading = false);
 
-    final List<Color> avatarPalette = const [
-      Color(0xFF0F766E),
-      Color(0xFF1D4ED8),
-      Color(0xFF7C3AED),
-      Color(0xFFB45309),
-    ];
+    if (res['canceled'] == true) {
+      return;
+    }
+
+    if (res['success'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFF10B981),
+          content: Text(res['message']?.toString() ?? 'Signed in with Google!'),
+        ),
+      );
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
+      );
+    } else if (res['needsConfig'] == true) {
+      _showOAuthConfigDialog(context, res['message']?.toString() ?? '');
+    } else {
+      _showError(res['message']?.toString() ?? 'Google Sign-In failed.');
+    }
+  }
+
+  void _showOAuthConfigDialog(BuildContext context, String errorReason) {
+    final provider = context.read<TransactionProvider>();
+    final clientIdCtrl = TextEditingController(text: provider.customGoogleWebClientId);
 
     showDialog(
       context: context,
-      barrierDismissible: !isAuthenticating,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          final bool isWideDialog = MediaQuery.of(context).size.width >= 680;
-
-          Widget buildLeftBrandingPane() {
-            String headingText = provider.tr('Choose an account', 'একটি অ্যাকাউন্ট বেছে নিন');
-            if (step == 1) headingText = provider.tr('Sign in', 'লগইন করুন');
-            if (step == 2) headingText = provider.tr('Welcome', 'স্বাগতম');
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0EA5E9).withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFF0EA5E9).withValues(alpha: 0.4)),
-                  ),
-                  child: const Icon(Icons.account_balance_rounded, color: Color(0xFF38BDF8), size: 24),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  headingText,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 28,
-                    fontWeight: FontWeight.w400,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                if (step == 2)
-                  InkWell(
-                    borderRadius: BorderRadius.circular(20),
-                    onTap: () => setDialogState(() => step = 1),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: const Color(0xFF444746)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.account_circle, color: Color(0xFFE3E3E3), size: 18),
-                          const SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              googleEmailOrPhoneCtrl.text.trim(),
-                              style: const TextStyle(color: Color(0xFFE3E3E3), fontSize: 12),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          const Icon(Icons.arrow_drop_down, color: Color(0xFFE3E3E3), size: 18),
-                        ],
-                      ),
-                    ),
-                  )
-                else
-                  RichText(
-                    text: TextSpan(
-                      style: const TextStyle(color: Color(0xFFE3E3E3), fontSize: 14),
-                      children: [
-                        TextSpan(text: provider.tr('to continue to ', 'চালিয়ে যেতে ')),
-                        const TextSpan(
-                          text: 'FinBlend',
-                          style: TextStyle(color: Color(0xFF8AB4F8), fontWeight: FontWeight.w600),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            );
-          }
-
-          Widget buildPrivacyFooterText() {
-            return RichText(
-              text: TextSpan(
-                style: const TextStyle(color: Color(0xFF9AA0A6), fontSize: 12, height: 1.5),
-                children: [
-                  TextSpan(
-                    text: provider.tr(
-                      'Before using this app, you can review FinBlend\'s ',
-                      'এই অ্যাপটি ব্যবহারের পূর্বে আপনি ফিনব্লেন্ডের ',
-                    ),
-                  ),
-                  TextSpan(
-                    text: provider.tr('Privacy Policy', 'গোপনীয়তা নীতি'),
-                    style: const TextStyle(color: Color(0xFF8AB4F8), fontWeight: FontWeight.w500),
-                  ),
-                  TextSpan(text: provider.tr(' and ', ' এবং ')),
-                  TextSpan(
-                    text: provider.tr('Terms of Service', 'ব্যবহারের শর্তাবলী'),
-                    style: const TextStyle(color: Color(0xFF8AB4F8), fontWeight: FontWeight.w500),
-                  ),
-                  const TextSpan(text: '.'),
-                ],
-              ),
-            );
-          }
-
-          Widget buildRightPane() {
-            // =================================================================
-            // STEP 1: "USE ANOTHER ACCOUNT" (EXACT MATCH TO IMAGE_84DED9.PNG)
-            // =================================================================
-            if (step == 1) {
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  TextField(
-                    controller: googleEmailOrPhoneCtrl,
-                    keyboardType: TextInputType.emailAddress,
-                    autofocus: true,
-                    style: const TextStyle(color: Colors.white, fontSize: 15),
-                    onChanged: (_) {
-                      if (inlineError != null) setDialogState(() => inlineError = null);
-                    },
-                    decoration: InputDecoration(
-                      labelText: provider.tr('Email or phone', 'ইমেইল বা ফোন'),
-                      labelStyle: const TextStyle(color: Color(0xFF8AB4F8), fontSize: 13),
-                      floatingLabelBehavior: FloatingLabelBehavior.always,
-                      errorText: inlineError,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-                      filled: true,
-                      fillColor: const Color(0xFF0E0E0E),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(4),
-                        borderSide: const BorderSide(color: Color(0xFF8AB4F8), width: 1.5),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(4),
-                        borderSide: const BorderSide(color: Color(0xFF8AB4F8), width: 2),
-                      ),
-                      errorBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(4),
-                        borderSide: const BorderSide(color: Color(0xFFF28B82), width: 1.5),
-                      ),
-                      focusedErrorBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(4),
-                        borderSide: const BorderSide(color: Color(0xFFF28B82), width: 2),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: InkWell(
-                      onTap: () {
-                        setDialogState(() {
-                          googleEmailOrPhoneCtrl.text = 'corps.rifat@gmail.com';
-                          inlineError = null;
-                        });
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4.0),
-                        child: Text(
-                          provider.tr('Forgot email?', 'ইমেইল ভুলে গেছেন?'),
-                          style: const TextStyle(
-                            color: Color(0xFF8AB4F8),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 28),
-                  buildPrivacyFooterText(),
-                  const SizedBox(height: 32),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          setState(() => _isLogin = false);
-                        },
-                        child: Text(
-                          provider.tr('Create account', 'অ্যাকাউন্ট তৈরি করুন'),
-                          style: const TextStyle(
-                            color: Color(0xFF8AB4F8),
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFA8C7FA),
-                          foregroundColor: const Color(0xFF062E6F),
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                          elevation: 0,
-                        ),
-                        onPressed: () {
-                          String input = googleEmailOrPhoneCtrl.text.trim().toLowerCase();
-                          if (input.isEmpty) {
-                            setDialogState(() => inlineError = provider.tr('Enter an email or phone number', 'ইমেইল বা ফোন নম্বর দিন'));
-                            return;
-                          }
-                          if (!input.contains('@') && input.replaceAll(RegExp(r'[^0-9]'), '').length < 6) {
-                            input = '$input@gmail.com';
-                            googleEmailOrPhoneCtrl.text = input;
-                          }
-                          if (input.contains('@') && !TransactionProvider.isValidGoogleEmail(input)) {
-                            setDialogState(() => inlineError = provider.tr('Use a Google account (not Yahoo/Outlook)', 'সঠিক গুগল অ্যাকাউন্ট দিন'));
-                            return;
-                          }
-                          setDialogState(() {
-                            inlineError = null;
-                            step = 2;
-                          });
-                        },
-                        child: Text(
-                          provider.tr('Next', 'পরবর্তী'),
-                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              );
-            }
-
-            // =================================================================
-            // STEP 2: GOOGLE PASSWORD VERIFICATION STEP
-            // =================================================================
-            if (step == 2) {
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  TextField(
-                    controller: googlePasswordCtrl,
-                    obscureText: !showGooglePassword,
-                    autofocus: true,
-                    style: const TextStyle(color: Colors.white, fontSize: 15),
-                    decoration: InputDecoration(
-                      labelText: provider.tr('Enter your password', 'আপনার পাসওয়ার্ড দিন'),
-                      labelStyle: const TextStyle(color: Color(0xFF8AB4F8), fontSize: 13),
-                      floatingLabelBehavior: FloatingLabelBehavior.always,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-                      filled: true,
-                      fillColor: const Color(0xFF0E0E0E),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(4),
-                        borderSide: const BorderSide(color: Color(0xFF8AB4F8), width: 1.5),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(4),
-                        borderSide: const BorderSide(color: Color(0xFF8AB4F8), width: 2),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Checkbox(
-                        value: showGooglePassword,
-                        activeColor: const Color(0xFF8AB4F8),
-                        checkColor: const Color(0xFF062E6F),
-                        onChanged: (v) => setDialogState(() => showGooglePassword = v ?? false),
-                      ),
-                      Text(
-                        provider.tr('Show password', 'পাসওয়ার্ড দেখুন'),
-                        style: const TextStyle(color: Color(0xFFE3E3E3), fontSize: 13),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: isAuthenticating ? null : () => setDialogState(() => step = 1),
-                        child: Text(
-                          provider.tr('Back', 'পিছনে'),
-                          style: const TextStyle(color: Color(0xFF8AB4F8), fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFA8C7FA),
-                          foregroundColor: const Color(0xFF062E6F),
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                          elevation: 0,
-                        ),
-                        onPressed: isAuthenticating
-                            ? null
-                            : () async {
-                          final rawEmail = googleEmailOrPhoneCtrl.text.trim().toLowerCase();
-                          setDialogState(() {
-                            isAuthenticating = true;
-                            authenticatingEmail = rawEmail;
-                          });
-                          final res = await provider.signInWithGoogleAccount(
-                            googleEmail: rawEmail,
-                            displayName: '',
-                          );
-                          if (ctx.mounted) Navigator.pop(ctx);
-                          if (mounted && res['success'] == true) {
-                            ScaffoldMessenger.of(this.context).showSnackBar(
-                              SnackBar(
-                                backgroundColor: const Color(0xFF10B981),
-                                content: Text(res['message']?.toString() ?? 'Signed in with Google!'),
-                              ),
-                            );
-                            Navigator.pushReplacement(
-                              this.context,
-                              MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
-                            );
-                          }
-                        },
-                        child: Text(
-                          isAuthenticating ? provider.tr('Signing in...', 'লগইন হচ্ছে...') : provider.tr('Next', 'পরবর্তী'),
-                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              );
-            }
-
-            // =================================================================
-            // STEP 0: "CHOOSE AN ACCOUNT" (EXACT MATCH TO IMAGE_84DEFE.PNG)
-            // =================================================================
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                ...accounts.asMap().entries.map((entry) {
-                  final int idx = entry.key;
-                  final String accEmail = entry.value;
-                  final String accName = provider.getGoogleDisplayName(accEmail);
-                  final bool isThisLoading = isAuthenticating && authenticatingEmail == accEmail;
-
-                  return Column(
-                    children: [
-                      InkWell(
-                        borderRadius: BorderRadius.circular(8),
-                        onTap: isAuthenticating
-                            ? null
-                            : () async {
-                          setDialogState(() {
-                            isAuthenticating = true;
-                            authenticatingEmail = accEmail;
-                          });
-                          final res = await provider.signInWithGoogleAccount(
-                            googleEmail: accEmail,
-                            displayName: accName,
-                          );
-                          if (ctx.mounted) Navigator.pop(ctx);
-                          if (mounted && res['success'] == true) {
-                            ScaffoldMessenger.of(this.context).showSnackBar(
-                              SnackBar(
-                                backgroundColor: const Color(0xFF10B981),
-                                content: Text(res['message']?.toString() ?? 'Signed in with Google!'),
-                              ),
-                            );
-                            Navigator.pushReplacement(
-                              this.context,
-                              MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
-                            );
-                          }
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 6.0),
-                          child: Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 18,
-                                backgroundColor: avatarPalette[idx % avatarPalette.length],
-                                child: Text(
-                                  accName.isNotEmpty ? accName[0].toUpperCase() : 'G',
-                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
-                                ),
-                              ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      accName,
-                                      style: const TextStyle(
-                                        color: Color(0xFFE3E3E3),
-                                        fontWeight: FontWeight.w500,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      accEmail,
-                                      style: const TextStyle(color: Color(0xFF9AA0A6), fontSize: 12),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              if (isThisLoading)
-                                const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF8AB4F8)),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const Divider(color: Color(0xFF3C4043), height: 1),
-                    ],
-                  );
-                }),
-
-                // USE ANOTHER ACCOUNT ROW
-                InkWell(
-                  borderRadius: BorderRadius.circular(8),
-                  onTap: isAuthenticating
-                      ? null
-                      : () => setDialogState(() {
-                    inlineError = null;
-                    step = 1;
-                  }),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 14.0, horizontal: 6.0),
-                    child: Row(
-                      children: [
-                        const CircleAvatar(
-                          radius: 18,
-                          backgroundColor: Colors.transparent,
-                          child: Icon(Icons.account_circle_outlined, color: Color(0xFFE3E3E3), size: 22),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Text(
-                            provider.tr('Use another account', 'অন্য একটি অ্যাকাউন্ট ব্যবহার করুন'),
-                            style: const TextStyle(
-                              color: Color(0xFFE3E3E3),
-                              fontWeight: FontWeight.w500,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const Divider(color: Color(0xFF3C4043), height: 1),
-                const SizedBox(height: 20),
-                buildPrivacyFooterText(),
-              ],
-            );
-          }
-
-          return Dialog(
-            backgroundColor: Colors.transparent,
-            insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: isWideDialog ? 760 : 440),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0E0E0E),
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: const Color(0xFF303134)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.55),
-                          blurRadius: 28,
-                          offset: const Offset(0, 12),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                          child: Row(
-                            children: [
-                              const GoogleLogoWidget(size: 18),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  provider.tr('Sign in with Google', 'Sign in with Google'),
-                                  style: const TextStyle(
-                                    color: Color(0xFFE3E3E3),
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                              IconButton(
-                                visualDensity: VisualDensity.compact,
-                                icon: const Icon(Icons.close, color: Color(0xFF9AA0A6), size: 18),
-                                onPressed: () => Navigator.pop(ctx),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const Divider(color: Color(0xFF3C4043), height: 1),
-                        Flexible(
-                          child: SingleChildScrollView(
-                            padding: const EdgeInsets.fromLTRB(28, 28, 28, 28),
-                            child: isWideDialog
-                                ? Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(flex: 5, child: buildLeftBrandingPane()),
-                                const SizedBox(width: 32),
-                                Expanded(flex: 6, child: buildRightPane()),
-                              ],
-                            )
-                                : Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                buildLeftBrandingPane(),
-                                const SizedBox(height: 22),
-                                buildRightPane(),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          provider.isBengali ? 'বাংলা (Bangladesh)' : 'English (United Kingdom)  ▾',
-                          style: const TextStyle(color: Color(0xFF9AA0A6), fontSize: 11),
-                        ),
-                        const Row(
-                          children: [
-                            Text('Help', style: TextStyle(color: Color(0xFF9AA0A6), fontSize: 11)),
-                            SizedBox(width: 16),
-                            Text('Privacy', style: TextStyle(color: Color(0xFF9AA0A6), fontSize: 11)),
-                            SizedBox(width: 16),
-                            Text('Terms', style: TextStyle(color: Color(0xFF9AA0A6), fontSize: 11)),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Row(
+          children: [
+            const GoogleLogoWidget(size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                provider.tr('Google OAuth Client Setup', 'গুগল OAuth ক্লায়েন্ট সেটআপ'),
+                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
               ),
             ),
-          );
-        },
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                errorReason,
+                style: const TextStyle(color: Color(0xFFF59E0B), fontSize: 12, height: 1.4),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                provider.tr(
+                  'Paste your Web OAuth Client ID (xxxx.apps.googleusercontent.com) from Google Cloud Console:',
+                  'গুগল ক্লাউড কনসোল থেকে আপনার Web OAuth Client ID এখানে পেস্ট করুন:',
+                ),
+                style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 12),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: clientIdCtrl,
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+                decoration: InputDecoration(
+                  hintText: '123456789-abc.apps.googleusercontent.com',
+                  hintStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
+                  filled: true,
+                  fillColor: const Color(0xFF0F172A),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(provider.tr('Close', 'বন্ধ করুন'), style: const TextStyle(color: Color(0xFF94A3B8))),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0EA5E9), foregroundColor: Colors.white),
+            onPressed: () async {
+              await provider.setGoogleWebClientId(clientIdCtrl.text);
+              if (ctx.mounted) Navigator.pop(ctx);
+              await _handleNativeGoogleSignIn();
+            },
+            child: Text(provider.tr('Save & Retry Google Sign-In', 'সেভ ও পুনরায় চেষ্টা করুন')),
+          ),
+        ],
       ),
     );
   }
@@ -1235,27 +744,33 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 22),
 
-                    // 1. CONTINUE WITH GOOGLE BUTTON
-                    OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0F172A),
-                        foregroundColor: Colors.white,
-                        side: const BorderSide(color: Color(0xFF475569), width: 1.2),
-                        padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                      ),
-                      onPressed: () => _showGoogleOAuthChooserDialog(context),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const GoogleLogoWidget(size: 20),
-                          const SizedBox(width: 12),
-                          Text(
-                            provider.tr('Continue with Google', 'Google দিয়ে চালিয়ে যান'),
-                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.white),
+                    // 1. OFFICIAL CONTINUE WITH GOOGLE BUTTON
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              backgroundColor: const Color(0xFF0F172A),
+                              foregroundColor: Colors.white,
+                              side: const BorderSide(color: Color(0xFF475569), width: 1.2),
+                              padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 16),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                            ),
+                            onPressed: _isLoading ? null : _handleNativeGoogleSignIn,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const GoogleLogoWidget(size: 20),
+                                const SizedBox(width: 12),
+                                Text(
+                                  provider.tr('Continue with Google', 'Google দিয়ে চালিয়ে যান'),
+                                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.white),
+                                ),
+                              ],
+                            ),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 10),
 

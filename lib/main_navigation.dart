@@ -113,7 +113,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
       // 2. CLOUD & GOOGLE DRIVE SYNC BUTTON
       IconButton(
-        tooltip: txProvider.tr('Cloud & Google Drive Backup', 'ক্লাউড ও গুগল ড্রাইভ ব্যাকআপ'),
+        tooltip: txProvider.tr('Google Drive Backup & Restore', 'গুগল ড্রাইভ ব্যাকআপ ও রিস্টোর'),
         icon: txProvider.isSyncing
             ? const SizedBox(
           width: 18,
@@ -333,7 +333,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 }
 
 // =============================================================================
-// PROFILE & SETTINGS SCREEN (WITH DIRECT GOOGLE DRIVE BACKUP & DELETE ACCOUNT)
+// PROFILE & SETTINGS SCREEN (MANUAL GOOGLE DRIVE PERMISSION + PERMANENT DELETE)
 // =============================================================================
 class ProfileScreen extends StatefulWidget {
   final String userName;
@@ -342,8 +342,6 @@ class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, required this.userName, required this.userEmail});
 
   static void showCloudSyncSheet(BuildContext context) {
-    final provider = context.read<TransactionProvider>();
-    final googleEmailCtrl = TextEditingController(text: provider.connectedGoogleEmail);
     final codeCtrl = TextEditingController();
 
     showModalBottomSheet(
@@ -369,7 +367,7 @@ class ProfileScreen extends StatefulWidget {
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              txProvider.tr('Google Drive & Full Account Backup', 'গুগল ড্রাইভ ও সম্পূর্ণ অ্যাকাউন্ট ব্যাকআপ'),
+                              txProvider.tr('Google Drive Backup & Restore', 'গুগল ড্রাইভ ব্যাকআপ ও রিস্টোর'),
                               style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -391,41 +389,29 @@ class ProfileScreen extends StatefulWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Active App Account: ${txProvider.cloudEmail}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                      Text(
+                        '${txProvider.tr("App Account", "অ্যাপ অ্যাকাউন্ট")}: ${txProvider.cloudEmail}',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
                       const SizedBox(height: 4),
                       Text(
-                        'Device Google Drive Account: ${txProvider.connectedGoogleEmail}',
-                        style: const TextStyle(color: Color(0xFF10B981), fontSize: 12, fontWeight: FontWeight.bold),
+                        '${txProvider.tr("Google Drive", "গুগল ড্রাইভ")}: ${txProvider.connectedGoogleEmail}',
+                        style: TextStyle(
+                          color: txProvider.isGoogleConnected ? const Color(0xFF10B981) : const Color(0xFF94A3B8),
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       Text(
-                        'Last Drive Backup: ${txProvider.lastGoogleDriveBackupAt}',
+                        '${txProvider.tr("Last Backup", "সর্বশেষ ব্যাকআপ")}: ${txProvider.lastGoogleDriveBackupAt}',
                         style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 11),
-                      ),
-                      Text(
-                        'Includes: Personal Info + ${txProvider.transactions.length} Transactions + ${txProvider.wallets.length} Wallets + ${txProvider.groups.length} Groups + POS Data',
-                        style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
 
-                TextField(
-                  controller: googleEmailCtrl,
-                  keyboardType: TextInputType.emailAddress,
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                  decoration: InputDecoration(
-                    labelText: txProvider.tr('Google Account for Drive Backup (@gmail.com)', 'গুগল ড্রাইভ ব্যাকআপ ইমেইল (@gmail.com)'),
-                    labelStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
-                    prefixIcon: const Icon(Icons.mail_outline, color: Color(0xFF38BDF8), size: 18),
-                    filled: true,
-                    fillColor: const Color(0xFF0F172A),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // DIRECT GOOGLE DRIVE BACKUP & RESTORE BUTTONS
+                // DIRECT GOOGLE DRIVE BACKUP & RESTORE (WITH DEVICE GOOGLE PERMISSION)
                 Row(
                   children: [
                     Expanded(
@@ -439,9 +425,7 @@ class ProfileScreen extends StatefulWidget {
                         onPressed: txProvider.isSyncing
                             ? null
                             : () async {
-                          final res = await txProvider.backupFullAccountToGoogleDrive(
-                            overrideGoogleEmail: googleEmailCtrl.text.trim(),
-                          );
+                          final res = await txProvider.backupFullAccountToGoogleDrive();
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
@@ -452,7 +436,10 @@ class ProfileScreen extends StatefulWidget {
                           }
                         },
                         icon: const Icon(Icons.add_to_drive_rounded, size: 18),
-                        label: Text(txProvider.tr('Save to Google Drive', 'ড্রাইভে ব্যাকআপ রাখুন'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                        label: Text(
+                          txProvider.tr('Backup to Drive', 'ড্রাইভে ব্যাকআপ'),
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -468,7 +455,6 @@ class ProfileScreen extends StatefulWidget {
                             ? null
                             : () async {
                           final res = await txProvider.restoreFullAccountFromGoogleDrive(
-                            googleEmail: googleEmailCtrl.text.trim(),
                             preserveCurrentAccountEmail: true,
                           );
                           if (context.mounted) {
@@ -481,14 +467,17 @@ class ProfileScreen extends StatefulWidget {
                           }
                         },
                         icon: const Icon(Icons.cloud_download_outlined, size: 18),
-                        label: Text(txProvider.tr('Restore from Drive', 'ড্রাইভ থেকে রিস্টোর'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                        label: Text(
+                          txProvider.tr('Restore from Drive', 'ড্রাইভ থেকে রিস্টোর'),
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 10),
 
-                // DOWNLOAD FULL .JSON FILE & COPY KEY
+                // EXPORT .JSON FILE & COPY BACKUP JSON
                 Row(
                   children: [
                     Expanded(
@@ -501,7 +490,10 @@ class ProfileScreen extends StatefulWidget {
                         ),
                         onPressed: () => txProvider.downloadFullAccountBackupFile(),
                         icon: const Icon(Icons.download_rounded, size: 17),
-                        label: Text(txProvider.tr('Download .json File', 'ফাইল ডাউনলোড (.json)'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                        label: Text(
+                          txProvider.tr('Export .json File', 'ফাইল ডাউনলোড (.json)'),
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -516,11 +508,14 @@ class ProfileScreen extends StatefulWidget {
                         onPressed: () {
                           Clipboard.setData(ClipboardData(text: txProvider.generateFullAccountBackupString()));
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(backgroundColor: Color(0xFF10B981), content: Text('Full Account Backup JSON copied to clipboard!')),
+                            const SnackBar(backgroundColor: Color(0xFF10B981), content: Text('Backup JSON copied to clipboard!')),
                           );
                         },
                         icon: const Icon(Icons.copy, size: 16),
-                        label: Text(txProvider.tr('Copy Backup JSON', 'ব্যাকআপ কপি'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                        label: Text(
+                          txProvider.tr('Copy Backup JSON', 'ব্যাকআপ কপি'),
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
                       ),
                     ),
                   ],
@@ -535,7 +530,7 @@ class ProfileScreen extends StatefulWidget {
                         controller: codeCtrl,
                         style: const TextStyle(color: Colors.white, fontSize: 12),
                         decoration: InputDecoration(
-                          hintText: txProvider.tr('Paste Backup JSON to import into this account...', 'এই অ্যাকাউন্টে ইমপোর্ট করতে ব্যাকআপ পেস্ট করুন...'),
+                          hintText: txProvider.tr('Paste Backup JSON to import...', 'ইমপোর্ট করতে ব্যাকআপ পেস্ট করুন...'),
                           hintStyle: const TextStyle(color: Colors.grey, fontSize: 11),
                           filled: true,
                           fillColor: const Color(0xFF0F172A),
@@ -685,8 +680,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // ===========================================================================
+  // PERMANENT ACCOUNT DELETION (100% MANUAL BACKUP POLICY)
+  // ===========================================================================
   void _showDeleteAccountConfirmationDialog(BuildContext context, TransactionProvider provider) {
-    bool backupToDriveBeforeDelete = true;
     bool isDeleting = false;
 
     showDialog(
@@ -701,38 +698,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  provider.tr('Delete Full Account?', 'অ্যাকাউন্ট ডিলিট করবেন?'),
+                  provider.tr('Delete Account Permanently?', 'অ্যাকাউন্ট স্থায়ীভাবে ডিলিট করবেন?'),
                   style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
                 ),
               ),
             ],
           ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                provider.tr(
-                  'This will delete your active account session and clear local data. If you keep Google Drive Backup enabled below, or download your .json backup file, you can restore 100% of your data anytime in the future!',
-                  'এটি আপনার বর্তমান অ্যাকাউন্টটি মুছে ফেলবে। তবে গুগল ড্রাইভে ব্যাকআপ রাখলে বা ফাইল ডাউনলোড করে রাখলে ভবিষ্যতে যেকোনো সময় নতুন বা একই অ্যাকাউন্টে সম্পূর্ণ ডাটা ফিরিয়ে আনতে পারবেন!',
-                ),
-                style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 12, height: 1.5),
-              ),
-              const SizedBox(height: 12),
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                activeColor: const Color(0xFF0EA5E9),
-                title: Text(
-                  provider.tr(
-                    'Auto-save full backup to Google Drive (${provider.connectedGoogleEmail}) before deleting',
-                    'ডিলিট করার আগে স্বয়ংক্রিয়ভাবে গুগল ড্রাইভে (${provider.connectedGoogleEmail}) ব্যাকআপ রাখুন',
-                  ),
-                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                ),
-                value: backupToDriveBeforeDelete,
-                onChanged: (v) => setDialogState(() => backupToDriveBeforeDelete = v ?? true),
-              ),
-            ],
+          content: Text(
+            provider.tr(
+              'Deleting your account will permanently erase all active transactions, wallets, budgets, and groups. No automatic backup will be created. If you want a backup, please export or back up to Google Drive manually before deleting.',
+              'অ্যাকাউন্ট ডিলিট করলে আপনার সকল লেনদেন, ওয়ালেট, বাজেট এবং গ্রুপ স্থায়ীভাবে মুছে যাবে। কোনো স্বয়ংক্রিয় ব্যাকআপ রাখা হবে না।',
+            ),
+            style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 12, height: 1.5),
           ),
           actions: [
             TextButton(
@@ -748,19 +725,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ? null
                   : () async {
                 setDialogState(() => isDeleting = true);
-                await provider.deleteFullAccount(backupToDriveFirst: backupToDriveBeforeDelete);
+                await provider.deleteFullAccount(backupToDriveFirst: false);
                 if (ctx.mounted) Navigator.pop(ctx);
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      backgroundColor: const Color(0xFF10B981),
+                      backgroundColor: const Color(0xFFEF4444),
                       content: Text(
-                        backupToDriveBeforeDelete
-                            ? provider.tr(
-                          'Account backed up to Google Drive and deleted! You can restore it anytime from the Login screen.',
-                          'গুগল ড্রাইভে ব্যাকআপ রেখে অ্যাকাউন্ট ডিলিট করা হয়েছে! লগইন স্ক্রিন থেকে যেকোনো সময় রিস্টোর করতে পারবেন।',
-                        )
-                            : provider.tr('Account deleted.', 'অ্যাকাউন্ট ডিলিট করা হয়েছে।'),
+                        provider.tr(
+                          'Account and all active data permanently deleted.',
+                          'অ্যাকাউন্ট এবং সকল ডাটা স্থায়ীভাবে মুছে ফেলা হয়েছে।',
+                        ),
                       ),
                     ),
                   );
@@ -775,7 +750,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               label: Text(
                 isDeleting
                     ? provider.tr('Deleting...', 'ডিলিট হচ্ছে...')
-                    : provider.tr('Delete Account', 'অ্যাকাউন্ট ডিলিট'),
+                    : provider.tr('Delete Permanently', 'স্থায়ীভাবে ডিলিট'),
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
@@ -868,7 +843,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               const SizedBox(height: 2),
                               Text(
                                 'Google Drive: ${txProvider.connectedGoogleEmail}',
-                                style: const TextStyle(color: Color(0xFF10B981), fontSize: 11, fontWeight: FontWeight.w600),
+                                style: TextStyle(
+                                  color: txProvider.isGoogleConnected ? const Color(0xFF10B981) : const Color(0xFF94A3B8),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                               if (txProvider.userOccupation.isNotEmpty) ...[
                                 const SizedBox(height: 4),
@@ -1521,12 +1500,12 @@ class HelpCenterScreen extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         children: [
           ListTile(
-            title: Text(p.tr('1. Full Account Backup & Google Drive Sync', '১. সম্পূর্ণ অ্যাকাউন্ট ব্যাকআপ ও গুগল ড্রাইভ সিঙ্ক'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            subtitle: Text(p.tr('Go to Export Financial Statement or tap the Google Drive icon in the top bar to save 100% of your account directly to Google Drive or download a .json backup file.', 'এক্সপোর্ট স্ক্রিন অথবা উপরের গুগল ড্রাইভ আইকনে ট্যাপ করে আপনার সম্পূর্ণ অ্যাকাউন্ট গুগল ড্রাইভে সেভ করুন অথবা .json ফাইল ডাউনলোড করুন।'), style: const TextStyle(color: Color(0xFF94A3B8))),
+            title: Text(p.tr('1. Manual Google Drive Backup & Restore', '১. গুগল ড্রাইভ ব্যাকআপ ও রিস্টোর'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            subtitle: Text(p.tr('All backups and restores are 100% manual. When you tap Drive Backup or Restore from Drive, Google will ask you to select a device Google account and grant permission.', 'সকল ব্যাকআপ ও রিস্টোর সম্পূর্ণ ম্যানুয়াল। ড্রাইভ ব্যাকআপ বা রিস্টোর বাটনে ট্যাপ করলে ডিভাইসের গুগল অ্যাকাউন্ট নির্বাচন ও অনুমতি চাওয়া হবে।'), style: const TextStyle(color: Color(0xFF94A3B8))),
           ),
           ListTile(
-            title: Text(p.tr('2. Importing into a New or Existing Account', '২. নতুন বা বিদ্যমান অ্যাকাউন্টে ব্যাকআপ ইমপোর্ট'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            subtitle: Text(p.tr('Even if you delete your account and sign up months later with a new email, open "Import / Restore Backup" to load all your personal info, transactions, and other data.', 'অ্যাকাউন্ট ডিলিট করার পর নতুন অ্যাকাউন্ট খুলেও "Import / Restore Backup" অপশন থেকে পূর্বের সকল ডাটা ফিরিয়ে আনতে পারবেন।'), style: const TextStyle(color: Color(0xFF94A3B8))),
+            title: Text(p.tr('2. Permanent Account Deletion', '২. স্থায়ীভাবে অ্যাকাউন্ট ডিলিট'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            subtitle: Text(p.tr('Deleting your account permanently wipes all active data. If you sign back in later, your account starts empty unless you manually restore a previous backup.', 'অ্যাকাউন্ট ডিলিট করলে সকল সক্রিয় ডাটা মুছে যায়। পরবর্তীতে লগইন করলে অ্যাকাউন্টটি সম্পূর্ণ খালি থাকবে যতক্ষণ না আপনি ম্যানুয়ালি রিস্টোর করেন।'), style: const TextStyle(color: Color(0xFF94A3B8))),
           ),
         ],
       ),
@@ -1607,8 +1586,8 @@ class TermsPoliciesScreen extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         child: Text(
           p.tr(
-            'All financial records, receipts, memos, and full account backups are encrypted and synchronized with your personal FinBlend Cloud ID and Google Drive Vault.',
-            'সকল আর্থিক তথ্য, রসিদ, মেমো এবং সম্পূর্ণ অ্যাকাউন্ট ব্যাকআপ আপনার ব্যক্তিগত ফিনব্লেন্ড ক্লাউড আইডি ও গুগল ড্রাইভে নিরাপদে সংরক্ষিত থাকে।',
+            'All financial records, receipts, memos, and full account backups are encrypted and synchronized with your personal FinBlend Cloud ID and authorized Google Drive.',
+            'সকল আর্থিক তথ্য, রসিদ, মেমো এবং সম্পূর্ণ অ্যাকাউন্ট ব্যাকআপ আপনার ব্যক্তিগত ফিনব্লেন্ড ক্লাউড আইডি ও অনুমোদিত গুগল ড্রাইভে নিরাপদে সংরক্ষিত থাকে।',
           ),
           style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 14, height: 1.6),
         ),
