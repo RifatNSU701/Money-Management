@@ -64,11 +64,9 @@ Managing everyday finances typically forces users to switch between three or fou
 
 ## 3. Application Interface Gallery
 
-> *Note: Ensure `7.png`, `5.png`, `8.png`, and `9.png` are located in the root directory (or update the paths below if stored in an `assets/` folder).*
-
 | (a) Secure Login & OAuth 2.0 | (b) Enterprise POS Suite | (c) Group & Trip Budget Split | (d) Cloud Backup & Export |
 | :---: | :---: | :---: | :---: |
-| <img src="7.png" width="200" alt="Secure Login"/> | <img src="5.png" width="200" alt="Enterprise POS"/> | <img src="8.png" width="200" alt="Group Split"/> | <img src="9.png" width="200" alt="Backup and Export"/> |
+| <img src="assets/7.png" width="200" alt="Secure Login"/> | <img src="assets/5.png" width="200" alt="Enterprise POS"/> | <img src="assets/8.png" width="200" alt="Group Split"/> | <img src="assets/9.png" width="200" alt="Backup and Export"/> |
 
 ---
 
