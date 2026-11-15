@@ -72,7 +72,7 @@ Managing everyday finances typically forces users to switch between three or fou
 
 ## 4. Complete User Manual (Step-by-Step Guide)
 
-> **Video Walkthrough:** Prefer watching a demonstration? [**Click here to watch the narrated Video User Manual**](https://drive.google.com/file/d/1xAGm4Bgd1BapC8OjcKpkFr69sZAHVm3D/view?usp=drive_link).
+> **Video Walkthrough:** Prefer watching a demonstration? [**Click here to watch the narrated Video User Manual**](https://drive.google.com/file/d/1FTvEykIT6omRJSDe28UmEKj0b1L2ZLfh/view?usp=drive_link).
 
 ### Module 1: Authentication & Onboarding
 1. **Launch FinBlend** on your Android device or open the [Web Application](https://moneymanagement-pearl.vercel.app/).
