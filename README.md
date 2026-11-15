@@ -135,7 +135,7 @@ Managing everyday finances typically forces users to switch between three or fou
   2. Sign in with Google or create a local account to begin immediately.
 
 * **Option B — Android APK Installation:**
-  1. Download `FinBlend.apk` from [**GitHub Releases**](../../releases/latest/download/FinBlend.apk) or the [**Google Drive Mirror**](https://drive.google.com/file/d/1ViWQZjhSB_9vX4kPh2GAnoLuoSN--A8-/view?usp=drive_link).
+  1. Download `FinBlend.apk` from [**GitHub Releases**](../../releases/latest/download/FinBlend.apk) or the [**Google Drive Mirror**](https://drive.google.com/file/d/1RDpViBA8UsbtypKaY4rriuzMEx9DFxyS/view?usp=drive_link).
   2. Open the downloaded `.apk` file on your Android device.
   3. If prompted, enable *Install from Unknown Sources* in your Android browser/file manager settings and complete installation.
 
