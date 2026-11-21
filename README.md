@@ -10,10 +10,6 @@
 ![Google OAuth 2.0](https://img.shields.io/badge/Security-Google_OAuth_2.0-EA4335?style=flat-square&logo=google&logoColor=white)
 ![Google Drive API](https://img.shields.io/badge/Cloud_Backup-Drive_REST_API_v3-34A853?style=flat-square&logo=googledrive&logoColor=white)
 ![Localization](https://img.shields.io/badge/Language-English_%7C_বাংলা-F9AB00?style=flat-square)
-
-**Course:** CSE299 (Junior Design Project) | **Section:** 01 | **Group:** 04  
-**Institution:** Department of Electrical and Computer Engineering, North South University
-
 </div>
 
 ---
