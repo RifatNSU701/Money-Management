@@ -170,14 +170,9 @@ Managing everyday finances typically forces users to switch between three or fou
 **Course:** CSE299 — Junior Design Project (Section 01, Group 04)  
 **Instructor:** Dr. Shafin Rahman
 
-**Contributors:** 
-1. Md Rifat Khan Rabbi
-2. Mahmudul Haque Mahim
 
 **Contact Emails:**  
 * **Md Rifat Khan Rabbi:** `md.khanrabbi1324@northsouth.edu`  
-* **Mahmudul Haque Mahim:** `mahmudul.haque1@northsouth.edu`
-
 ---
 
 ## 8. Academic & Technical References
