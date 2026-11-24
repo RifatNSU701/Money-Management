@@ -167,7 +167,6 @@ Managing everyday finances typically forces users to switch between three or fou
 
 ## 7. Team & Individual Contributions
 
-**Course:** CSE299 — Junior Design Project (Section 01, Group 04)  
 **Instructor:** Dr. Shafin Rahman
 
 
