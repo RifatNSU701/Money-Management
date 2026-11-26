@@ -8,6 +8,7 @@
 [![Live Web App](https://img.shields.io/badge/Live_Web_App-moneymanagement--pearl.vercel.app-00C7B7?style=for-the-badge&logo=vercel&logoColor=white)](https://moneymanagement-pearl.vercel.app/)
 [![Download APK v2.0.0](https://img.shields.io/badge/Download_APK-v2.0.0_(Android)-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/RifatNSU701/Money-Management/releases/download/v2.0.0/FinBlend_v2.0.0.apk)
 [![Release Notes](https://img.shields.io/badge/GitHub_Release-v2.0.0_Latest-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/RifatNSU701/Money-Management/releases/tag/v2.0.0)
+[![License: Proprietary](https://img.shields.io/badge/License-All_Rights_Reserved-D32F2F?style=for-the-badge)](./LICENSE)
 
 ![Flutter](https://img.shields.io/badge/Flutter-Cross--Platform-02569B?style=flat-square&logo=flutter&logoColor=white)
 ![SQLite](https://img.shields.io/badge/Database-Offline--First_SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white)
@@ -21,12 +22,12 @@
 
 ## Quick Access & Project Deliverables
 
-For evaluators, instructors, and end users, all `v2.0.0` production deliverables are directly accessible below:
+For evaluators, instructors, and end users, all official `v2.0.0` deliverables are directly accessible below:
 
 | Deliverable | Platform / Format | Direct Access Link | Description |
 | :--- | :--- | :--- | :--- |
 | **1. Live Web Application** | Web (Desktop & Mobile Browsers) | [**Launch FinBlend Web App**](https://moneymanagement-pearl.vercel.app/) | Instant browser access hosted on Vercel with SPA routing, tab persistence across reloads, and Google Drive sync. |
-| **2. Android Application (`v2.0.0`)** | Android OS (`.apk` Installer) | [**Download `FinBlend_v2.0.0.apk` (GitHub)**](https://github.com/RifatNSU701/Money-Management/releases/download/v2.0.0/FinBlend_v2.0.0.apk) <br> [**View Release Notes**](https://github.com/RifatNSU701/Money-Management/releases/tag/v2.0.0) <br> [**Google Drive Mirror**](https://drive.google.com/file/d/1ViWQZjhSB_9vX4kPh2GAnoLuoSN--A8-/view?usp=drive_link) | Standalone offline-first Android release (`v2.0.0`) with custom app icon, COGS POS, PIN lock, and PDF/CSV export. |
+| **2. Android Application (`v2.0.0`)** | Android OS (`.apk` Installer) | [**Download `FinBlend_v2.0.0.apk` (GitHub)**](https://github.com/RifatNSU701/Money-Management/releases/download/v2.0.0/FinBlend_v2.0.0.apk) <br> [**View Release Notes**](https://github.com/RifatNSU701/Money-Management/releases/tag/v2.0.0) <br> [**Google Drive Mirror**](https://drive.google.com/file/d/1ViWQZjhSB_9vX4kPh2GAnoLuoSN--A8-/view?usp=drive_link) | Official standalone offline-first Android release (`v2.0.0`) with custom app icon, COGS POS, PIN lock, and PDF/CSV export. |
 | **3. Video User Manual** | MP4 Annotated Walkthrough | [**Watch Instructional Video**](https://drive.google.com/file/d/1xAGm4Bgd1BapC8OjcKpkFr69sZAHVm3D/view?usp=drive_link) | Step-by-step narrated walkthrough demonstrating all core modules and workflows. |
 
 ---
@@ -37,10 +38,11 @@ For evaluators, instructors, and end users, all `v2.0.0` production deliverables
 2. [Key Features (`v2.0.0`)](#2-key-features-v200)
 3. [Application Interface Gallery](#3-application-interface-gallery)
 4. [Complete User Manual (Step-by-Step Guide)](#4-complete-user-manual-step-by-step-guide)
-5. [Installation & Setup Guide](#5-installation--setup-guide)
+5. [Access & Installation Guide](#5-access--installation-guide)
 6. [System Architecture & Tech Stack](#6-system-architecture--tech-stack)
 7. [Author, Course & Project Information](#7-author-course--project-information)
-8. [Academic & Technical References](#8-academic--technical-references)
+8. [License & Proprietary Rights](#8-license--proprietary-rights)
+9. [Academic & Technical References](#9-academic--technical-references)
 
 ---
 
@@ -79,7 +81,7 @@ Managing everyday finances typically forces users to juggle three or four discon
 1. **Open FinBlend:** Launch the installed Android app or open [https://moneymanagement-pearl.vercel.app/](https://moneymanagement-pearl.vercel.app/) in your browser.
 2. **Sign In or Register:**
    - **Continue with Google (Recommended):** Tap **Continue with Google** and pick your Google account to authenticate via OAuth 2.0 and enable direct Google Drive cloud backups.
-     > **First-Time Google Sign-In Note:** Because FinBlend is an independent academic/production release not yet listed on Google's commercial verification directory, Google may show a *"Google hasn't verified this app"* notice on first login. Click **Advanced** → **Go to FinBlend (unsafe)** → **Continue** to proceed normally.
+     > **First-Time Google Sign-In Note:** Because FinBlend is an independent production release not yet listed on Google's commercial verification directory, Google may show a *"Google hasn't verified this app"* notice on first login. Click **Advanced** → **Go to FinBlend (unsafe)** → **Continue** to proceed normally.
    - **Local Account Registration:** Switch to the **Register Account** tab, fill in your Full Name, Email, Mobile Number (`+880` validated), Date of Birth, Gender, Occupation, Address, and Password, then tap **Complete Registration**.
    - **Password Recovery:** If you forget a local account password, use the **Forgot Password** option with your **6-digit Recovery PIN** to reset access safely.
 3. **Top-Bar Quick Controls (Available Everywhere):**
@@ -166,42 +168,16 @@ Managing everyday finances typically forces users to juggle three or four discon
 
 ---
 
-## 5. Installation & Setup Guide
+## 5. Access & Installation Guide
 
-### For End Users (No Coding Required)
-
-- **Option A — Web Application (Instant Access):**
+- **Option A — Live Web Application (Instant Access):**
    1. Visit [**https://moneymanagement-pearl.vercel.app/**](https://moneymanagement-pearl.vercel.app/) on any desktop or mobile browser.
    2. Sign in with Google or create a local account to begin immediately.
 
-- **Option B — Android APK (`v2.0.0`) Installation:**
+- **Option B — Official Android APK (`v2.0.0`) Installation:**
    1. Download **`FinBlend_v2.0.0.apk`** directly from [**GitHub Releases (`v2.0.0`)**](https://github.com/RifatNSU701/Money-Management/releases/download/v2.0.0/FinBlend_v2.0.0.apk) (or via the [**Google Drive Mirror**](https://drive.google.com/file/d/1ViWQZjhSB_9vX4kPh2GAnoLuoSN--A8-/view?usp=drive_link)).
    2. Tap the downloaded `.apk` file on your Android phone.
    3. If prompted, enable **Install unknown apps** for your browser or file manager and complete installation.
-
-### For Developers (Building from Source)
-
-1. **Prerequisites:** Install the [Flutter SDK](https://docs.flutter.dev/get-started/install) (3.x or higher), Dart SDK, and Git.
-2. **Clone the Repository:**
-   ```bash
-   git clone [https://github.com/RifatNSU701/Money-Management.git](https://github.com/RifatNSU701/Money-Management.git)
-   cd Money-Management
-   ```
-3. **Install Dependencies:**
-   ```bash
-   flutter pub get
-   ```
-4. **Run Locally or Build Production Releases:**
-   ```bash
-   # Run Web App in Chrome
-   flutter run -d chrome
-
-   # Build Production Web Bundle (for Vercel)
-   flutter build web --release
-
-   # Build Production Android APK
-   flutter build apk --release
-   ```
 
 ---
 
@@ -220,16 +196,28 @@ Managing everyday finances typically forces users to juggle three or four discon
 
 ## 7. Author, Course & Project Information
 
-- **Project:** FinBlend (`v2.0.0`) 
-- **Instructor:** **Dr. Shafin Rahman** 
-- **Developer:** **Md Rifat Khan Rabbi** 
+- **Project:** FinBlend (`v2.0.0`)
+- **Instructor:** **Dr. Shafin Rahman**
+- **Developer & Copyright Owner:** **Md Rifat Khan Rabbi**
 - **Email:** `md.khanrabbi1324@northsouth.edu, corps.rifat@outlook.com`
 - **GitHub:** [@RifatNSU701](https://github.com/RifatNSU701)
-- **Portfolio:** [Crs](https://www.rifatkhan.tech/)
+- **Portfolio:** [CRS](https://www.rifatkhan.tech/)
 
 ---
 
-## 8. Academic & Technical References
+## 8. License & Proprietary Rights
+
+**Copyright © 2026 Md Rifat Khan Rabbi. All Rights Reserved.**
+
+FinBlend is **proprietary, closed-license software**—it is **not** open source.
+
+- **Prohibited Without Written Permission:** Copying, modifying, redistributing, sublicensing, reverse-engineering, rebranding, or commercially using any source code, assets, logos, or compiled binaries from this repository is strictly prohibited.
+- **Permitted Use:** End users may use the hosted web application and official unmodified `.apk` releases. North South University faculty and evaluators are granted read-only access solely for academic grading and verification.
+- **Full Terms:** See the complete [`LICENSE`](./LICENSE) file in this repository. For commercial licensing or collaboration inquiries, contact `md.khanrabbi1324@northsouth.edu`.
+
+---
+
+## 9. Academic & Technical References
 
 1. A. Biørn-Hansen, T.-M. Grønli, and G. Ghinea, "Cross-platform mobile app development: A comprehensive review," *IEEE Access*, vol. 8, pp. 170810–170827, 2020, doi: `10.1109/ACCESS.2020.3023742`.
 2. G. Allen and M. Owens, *The Definitive Guide to SQLite*, 2nd ed. New York, NY, USA: Apress, 2010.
