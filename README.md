@@ -213,7 +213,7 @@ FinBlend is **proprietary, closed-license software**—it is **not** open source
 
 - **Prohibited Without Written Permission:** Copying, modifying, redistributing, sublicensing, reverse-engineering, rebranding, or commercially using any source code, assets, logos, or compiled binaries from this repository is strictly prohibited.
 - **Permitted Use:** End users may use the hosted web application and official unmodified `.apk` releases. North South University faculty and evaluators are granted read-only access solely for academic grading and verification.
-- **Full Terms:** See the complete [`LICENSE`](./LICENSE) file in this repository. For commercial licensing or collaboration inquiries, contact `md.khanrabbi1324@northsouth.edu`.
+- **Full Terms:** See the complete [`LICENSE`](./LICENSE) file in this repository. For commercial licensing or collaboration inquiries, contact `corps.rifat@outlook.com`.
 
 ---
 
