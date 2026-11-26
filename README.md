@@ -220,10 +220,10 @@ Managing everyday finances typically forces users to juggle three or four discon
 
 ## 7. Author, Course & Project Information
 
-- **Project:** FinBlend (`v2.0.0`) — CSE299 Junior Design Project (Fall 2026), North South University
-- **Instructor:** Dr. Shafin Rahman
-- **Developer:** **Md Rifat Khan Rabbi** (ID: `2311181042`)
-- **Email:** `md.khanrabbi1324@northsouth.edu`
+- **Project:** FinBlend (`v2.0.0`) 
+- **Instructor:** **Dr. Shafin Rahman** 
+- **Developer:** **Md Rifat Khan Rabbi** 
+- **Email:** `md.khanrabbi1324@northsouth.edu, corps.rifat@outlook.com`
 - **GitHub:** [@RifatNSU701](https://github.com/RifatNSU701)
 - **Portfolio:** [Crs](https://www.rifatkhan.tech/)
 
