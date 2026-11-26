@@ -225,7 +225,7 @@ Managing everyday finances typically forces users to juggle three or four discon
 - **Developer:** **Md Rifat Khan Rabbi** (ID: `2311181042`)
 - **Email:** `md.khanrabbi1324@northsouth.edu`
 - **GitHub:** [@RifatNSU701](https://github.com/RifatNSU701)
-- **Portfolio:** [rifatkhan.tech](https://www.rifatkhan.tech/)
+- **Portfolio:** [Crs](https://www.rifatkhan.tech/)
 
 ---
 
